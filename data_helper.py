@@ -53,3 +53,15 @@ def load_line_load(scenario_folder: str) -> pd.DataFrame:
     line_load['max_line_load'] = line_load[['pLoad_rp' + str(i) for i in range(1, num_rp+1)]].max(axis=1)
 
     return line_load
+
+def load_generation(scenario_folder: str) -> pd.DataFrame:
+    """
+    Load the generation data from the scenario folder.
+
+    :param scenario_folder: The folder of the scenario.
+
+    :return: The generation data.
+
+    """
+
+    return None

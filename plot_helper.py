@@ -84,3 +84,9 @@ def generate_interactive_plot(scenario_folder: str, plot_type: str):
 
         # calling the interact function
         interact(plot, scenario_folder=scenario_folder, rp=(1,rp_max), k=(1,k_max), show_input=bool(), show_line_load=bool())
+
+    elif plot_type == 'consumption':
+        raise NotImplementedError("Line load plot not implemented yet.")
+    
+    elif plot_type == 'generation':
+        raise NotImplementedError("Generation plot not implemented yet.")
