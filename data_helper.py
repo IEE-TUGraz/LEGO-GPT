@@ -65,3 +65,23 @@ def load_generation(scenario_folder: str) -> pd.DataFrame:
     """
 
     return None
+
+def load_total_energy(scenario_folder: str) -> pd.DataFrame:
+
+    """
+    Load the total energy data from the scenario folder.
+
+    :param scenario_folder: The folder of the scenario.
+
+    :return: The total energy data.
+    
+    """
+    
+    filepath_results = scenario_folder + "\\results\\results.xlsx"
+    df = pd.read_excel(filepath_results, sheet_name='TotalEnrp', skiprows=0, header=0,)
+    # rename 'Unnamed: 0' to 'rp'
+    df.rename(columns={'Unnamed: 0': 'rp'}, inplace=True)
+    # rename 'Unnamed: 1' to 'k'
+    df.rename(columns={'Unnamed: 1': 'k'}, inplace=True)
+
+    return df
