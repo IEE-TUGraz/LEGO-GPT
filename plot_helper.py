@@ -2,6 +2,8 @@ import data_helper as dh
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 from ipywidgets import interact # for interactive plots
+import plotly.graph_objects as go
+import pandas as pd
 
 def plot_network(scenario_folder: str, show_input: bool, show_line_load: bool = False, rp: int = 1, k: int = 1):
     """
@@ -90,3 +92,67 @@ def generate_interactive_plot(scenario_folder: str, plot_type: str):
     
     elif plot_type == 'generation':
         raise NotImplementedError("Generation plot not implemented yet.")
+
+
+def plot_energy_sources(scenario_folder: str):
+    """
+    Plot the energy sources from the excel results file uing plotly.
+
+    :param scenario_folder: The folder of the scenario.
+    """
+
+    # load the energy sources data
+    energy_sources = dh.load_total_energy(scenario_folder)
+
+   
+    import plotly.graph_objects as go
+    import pandas as pd
+
+    # Load results file
+    df = dh.load_total_energy(scenario_folder)
+    rps = df.rp.unique()
+    num_rp = len(rps)
+    # Initialize figure
+    fig = go.Figure()
+
+    # Add Traces
+
+
+    for rp in rps:
+        df_rp = df[df.rp == rp]
+        fig.add_trace(
+            go.Scatter(x=list(df_rp.k),
+                    y=list(df_rp.Coal),
+                    name="Coal",
+                    line=dict(color="#33CFA5")))
+
+        fig.add_trace(
+            go.Scatter(x=list(df_rp.k),
+                    y=list(df_rp.Wind),
+                    name="Wind",
+                    line=dict(color="#F06A6A")))
+
+
+    buttons = []
+
+    for i in range(num_rp):
+        visibility = [False]*num_rp*2
+        visibility[i] = True
+        visibility[i+1] = True
+        button = dict(label='rp' + str(i),
+                    method='update',
+                    args=[{'visible': visibility},
+                        {'title': 'Energy Sources for rp' + str(i)}])
+        buttons.append(button)
+    fig.update_layout(
+        updatemenus=[
+            dict(
+                active=0,
+                buttons=buttons,
+            )
+        ])
+
+    # Set title
+    fig.update_layout(title_text="Yahoo")
+
+    fig.show()
