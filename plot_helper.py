@@ -4,6 +4,7 @@ import matplotlib.cm as cm
 from ipywidgets import interact # for interactive plots
 import plotly.graph_objects as go
 import pandas as pd
+import numpy as np
 
 def plot_network(scenario_folder: str, show_input: bool, show_line_load: bool = False, rp: int = 1, k: int = 1):
     """
@@ -101,49 +102,33 @@ def plot_energy_sources(scenario_folder: str):
     :param scenario_folder: The folder of the scenario.
     """
 
-    # load the energy sources data
-    energy_sources = dh.load_total_energy(scenario_folder)
-
-   
-    import plotly.graph_objects as go
-    import pandas as pd
-
     # Load results file
     df = dh.load_total_energy(scenario_folder)
     rps = df.rp.unique()
     num_rp = len(rps)
+    columns = df.columns[2:]
     # Initialize figure
     fig = go.Figure()
 
     # Add Traces
-
-
     for rp in rps:
-        df_rp = df[df.rp == rp]
-        fig.add_trace(
-            go.Scatter(x=list(df_rp.k),
-                    y=list(df_rp.Coal),
-                    name="Coal",
-                    line=dict(color="#33CFA5")))
-
-        fig.add_trace(
-            go.Scatter(x=list(df_rp.k),
-                    y=list(df_rp.Wind),
-                    name="Wind",
-                    line=dict(color="#F06A6A")))
-
+        for column in columns:
+            fig.add_trace(
+                go.Scatter(x=list(df[df.rp == rp].k),
+                        y=list(df[df.rp == rp][column]),
+                        name=column))
 
     buttons = []
 
     for i in range(num_rp):
-        visibility = [False]*num_rp*2
-        visibility[i] = True
-        visibility[i+1] = True
+        visibility = np.array([False]*num_rp*len(columns))
+        visibility[i*len(columns):(i+1)*len(columns)] = True
         button = dict(label='rp' + str(i),
                     method='update',
                     args=[{'visible': visibility},
                         {'title': 'Energy Sources for rp' + str(i)}])
         buttons.append(button)
+
     fig.update_layout(
         updatemenus=[
             dict(
