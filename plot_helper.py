@@ -1,97 +1,9 @@
 import data_helper as dh
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
-from ipywidgets import interact # for interactive plots
 import plotly.graph_objects as go
 import pandas as pd
 import numpy as np
-
-def plot_network(scenario_folder: str, show_input: bool, show_line_load: bool = False, rp: int = 1, k: int = 1):
-    """
-    Plot the network from the excel input files. First the network is loaded and then plotted.
-
-    :param scenario_folder: The folder of the scenario.
-    :param show_input: The checkbox for the input.
-    :param line_load: The checkbox for the line load plot. If True, the maximum line load is color coded.
-    :param rp: The representative period to plot.
-    :param k: The hour k to plot.
-    """
-
-    # load the network data
-    network, bus_info = dh.load_network(scenario_folder)
-
-    # plot the network
-    fig, ax = plt.subplots()
-
-    if show_input:
-
-        for idx in network.index:
-            node1 = network.at[idx, 'node1']
-            node2 = network.at[idx, 'node2']
-            
-            node1_param = bus_info[bus_info['NodeID'] == node1]
-            node2_param = bus_info[bus_info['NodeID'] == node2]
-
-            ax.plot([node1_param['long'], node2_param['long']], [node1_param['lat'], node2_param['lat']], color='b')
-            ax.scatter(node1_param['long'], node1_param['lat'], color='black')
-            ax.scatter(node2_param['long'], node2_param['lat'], color='black')
-
-    if show_line_load:
-
-        # Create a colormap
-        cmap = cm.get_cmap('RdYlGn')
-        # invert the colormap
-        cmap = cmap.reversed()  
-        # load the line load data
-        line_load = dh.load_line_load(scenario_folder)
-
-        # take only the rows with the value of k
-        line_load = line_load[line_load['k'] == 'k' + str(k).zfill(4)]
-        for idx in line_load.index:
-
-            node1 = line_load.at[idx, 'node1']
-            node2 = line_load.at[idx, 'node2']
-            congestion = line_load.at[idx, 'pLoad_rp' + str(rp)]
-            node1_param = bus_info[bus_info['NodeID'] == node1]
-            node2_param = bus_info[bus_info['NodeID'] == node2]
-            # get the color from the colormap
-            color = cmap(congestion)
-
-            ax.plot([node1_param['long'], node2_param['long']],
-                    [node1_param['lat'], node2_param['lat']],
-                    color=color, linestyle='-')
-            ax.scatter(node1_param['long'], node1_param['lat'], color='black')
-            ax.scatter(node2_param['long'], node2_param['lat'], color='black')
-
-        # Create a colorbar
-        sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=0, vmax=1))
-        sm.set_array([])
-        fig.colorbar(sm, ax=ax, orientation='vertical') 
-
-
-def generate_interactive_plot(scenario_folder: str, plot_type: str):
-    """
-    Wrapper function to generate interactive plots. The function calls the interact function with the correct plot function.
-
-    :param scenario_folder: The folder of the scenario.
-    :param plot_type: The type of plot to generate.
-    """
-
-    if plot_type == 'network':
-        line_load = dh.load_line_load(scenario_folder)
-        rp_max = line_load.shape[1] - 4
-        k_max = line_load['k'].nunique()
-
-        plot = plot_network
-
-        # calling the interact function
-        interact(plot, scenario_folder=scenario_folder, rp=(1,rp_max), k=(1,k_max), show_input=bool(), show_line_load=bool())
-
-    elif plot_type == 'consumption':
-        raise NotImplementedError("Line load plot not implemented yet.")
-    
-    elif plot_type == 'generation':
-        raise NotImplementedError("Generation plot not implemented yet.")
 
 
 def plot_energy_sources(scenario_folder: str):
@@ -106,6 +18,8 @@ def plot_energy_sources(scenario_folder: str):
     rps = df.rp.unique()
     num_rp = len(rps)
     columns = df.columns[2:]
+    # remove columns with only 0 values
+    columns = [col for col in columns if df[col].sum() != 0]
     # Initialize figure
     fig = go.Figure()
 
@@ -138,71 +52,101 @@ def plot_energy_sources(scenario_folder: str):
         ])
 
     # Set title
-    fig.update_layout(title_text="Energy Sources for rp1")
+    fig.update_layout(title_text="Energy Sources for rp1", title_x=0.5)
 
-    fig.show()
+    return fig
 
 
 def plot_line_load(scenario_folder: str, rp: int = 1):
    
-        
+
     # load network data and line loads
     _, bus_info = dh.load_network(scenario_folder)
-    line_load = dh.load_line_load(scenario_folder)
+    line_load, _ = dh.load_line_load(scenario_folder)
 
-    # get number of representative periods
-    num_rp = line_load.shape[1] - 4
-
+    # get number of hours
     num_h = line_load['k'].nunique()
 
     # get the edges of the network as disconnected lines
-    # k=1
 
     # define function to generate traces that represent the lines and nodes
     def generate_traces(rp,k):
+
         # take values for hour k only
         line_load_k = line_load[line_load['k'] == 'k' + str(k).zfill(4)]
+        
         edge_traces = []
+
         for idx in line_load_k.index:
             edge_x = []
             edge_y = []
             node1 = line_load_k.at[idx, 'node1']
             node2 = line_load_k.at[idx, 'node2']
-            node1_param = bus_info[bus_info['NodeID'] == node1]
-            node2_param = bus_info[bus_info['NodeID'] == node2]
-            edge_x.append(node1_param['long'].to_numpy()[0])
-            edge_x.append(node2_param['long'].to_numpy()[0])
-            edge_y.append(node1_param['lat'].to_numpy()[0])
-            edge_y.append(node2_param['lat'].to_numpy()[0])
-            load = line_load_k.at[idx, 'pLoad_rp' + str(rp)]
-            color = cm.RdYlGn(1-load)
+            node1_int = int(node1[5:])
+            node2_int = int(node2[5:])
+            if node1_int > node2_int:
+                pass
+            else:            
+                node1_param = bus_info[bus_info['NodeID'] == node1]
+                node2_param = bus_info[bus_info['NodeID'] == node2]
+                edge_x.append(node1_param['long'].to_numpy()[0])
+                edge_x.append(node2_param['long'].to_numpy()[0])
+                edge_y.append(node1_param['lat'].to_numpy()[0])
+                edge_y.append(node2_param['lat'].to_numpy()[0])
 
-            color = color[0:3]
-            edge_traces.append(go.Scatter(
-                x=edge_x,
-                y=edge_y,
-                mode='lines',
-                line=dict(width=2, color='rgb'+str(color)),
-                hoverinfo='none',
-                legendgroup='rp'+str(rp),
-                showlegend=False,
-                visible=False
+                mid_x = (node1_param['long'].to_numpy()[0] + node2_param['long'].to_numpy()[0]) / 2
+                mid_y = (node1_param['lat'].to_numpy()[0] + node2_param['lat'].to_numpy()[0]) / 2
+                load = line_load_k.at[idx, 'pLoad_rp' + str(rp)]
+                angle = (np.arctan2( edge_y[1] - edge_y[0],edge_x[1] - edge_x[0]) * 180 / np.pi)
 
-            ))
+                angle = angle + 90 if angle < 0 else angle - 90
+                        
+                non_zero = 1 if load != 0 else 0
+
+                color = cm.RdYlGn(1-load)
+                color = color[0:3]
+
+                edge_traces.append(go.Scatter(
+                    x=edge_x,
+                    y=edge_y,
+                    mode='lines',
+                    line=dict(width=2, color='rgb'+str(color)),
+                    hoverinfo='skip',
+                    legendgroup='rp'+str(rp),
+                    showlegend=False,
+                    visible=False
+
+                ))
+
+                # set the hoverinfo for the midpoint marker
+                hoverinfo = 'text'
+                symbol = 'arrow' if non_zero else 'circle'
+                # Add a marker at the midpoint
+                edge_traces.append(go.Scatter(
+                    x=[mid_x],
+                    y=[mid_y],
+                    mode='markers',
+                    marker=dict(
+                        size=20*non_zero,  # Adjust size as needed
+                        symbol=symbol,
+                        angle=angle,
+                        color='rgb'+str(color),  # Use the same color as the line or adjust as needed
+                    ),
+                    hoverinfo=hoverinfo,
+                    legendgroup='rp'+str(rp),
+                    showlegend=False,
+                    visible=False
+                ))
 
         # add node traces
-        node_x = []
-        node_y = []
-        node_text = []
-
-        for idx in bus_info.index:
-            node_x.append(bus_info.at[idx, 'long'])
-            node_y.append(bus_info.at[idx, 'lat'])
-            node_text.append(bus_info.at[idx, 'NodeID'])
+        node_x = [bus_info.at[idx, 'long'] for idx in bus_info.index]
+        node_y = [bus_info.at[idx, 'lat'] for idx in bus_info.index]
+        node_id = [bus_info.at[idx, 'NodeID'] for idx in bus_info.index]
 
         node_trace = go.Scatter(
             x=node_x, y=node_y,
             mode='markers',
+            hovertext=node_id,
             hoverinfo='text',
             marker=dict(
                 showscale=True,
@@ -222,9 +166,8 @@ def plot_line_load(scenario_folder: str, rp: int = 1):
                 visible=False,
                 legendgroup='rp'+str(rp),
                 name='rp'+str(rp),
-                showlegend=True
+                showlegend=False
             )
-        node_trace.text = node_text
         traces = edge_traces
         traces.append(node_trace)
         return traces
@@ -248,8 +191,8 @@ def plot_line_load(scenario_folder: str, rp: int = 1):
         pad={"t": 50},
         steps=steps
     )]
-    # create the figure
 
+    # create the figure
     fig = go.Figure()
     for k in range(1,num_h+1):
         fig.add_traces(generate_traces(rp,k))
@@ -259,6 +202,17 @@ def plot_line_load(scenario_folder: str, rp: int = 1):
         fig.data[i].visible = True
 
     fig.update_layout(sliders=sliders)
+    # Update layout for equal axes
+    fig.update_layout(
+        xaxis=dict(
+            scaleanchor='y',
+            scaleratio=1,
+        ),
+        yaxis=dict(
+            scaleanchor='x',
+            scaleratio=1,
+        ),
+    )
 
     return fig
 
