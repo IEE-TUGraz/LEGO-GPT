@@ -252,3 +252,39 @@ def plot_line_load(scenario_folder: str, rp: int = 1):
 
     return fig
 
+
+def plot_storage_level(scenario_folder: str):
+
+    df = dh.load_storage_level(scenario_folder)
+    columns = df.columns[2:]
+    # remove columns with only 0 values
+    columns = [col for col in columns if df[col].sum() != 0]
+    num_h = df['h'].nunique()
+    # create a range slider
+
+
+
+    # create the figure
+    fig = go.Figure()
+
+    # add traces
+
+    for idx, column in enumerate(columns):
+        fig.add_trace(go.Scatter(x=df['h'], y=df[column], name=column))
+
+    # add range slider
+
+    fig.update_layout(
+        xaxis=dict(
+            rangeslider=dict(
+                visible=True
+            ),     
+           
+        )
+    )
+
+    return fig
+
+   
+
+
