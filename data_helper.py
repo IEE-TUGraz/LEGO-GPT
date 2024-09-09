@@ -34,7 +34,7 @@ def load_line_load(scenario_folder: str) -> pd.DataFrame:
 
     :param scenario_folder: The folder of the scenario.
 
-    :return: The line load data.
+    :return: The line load data and the options for rp selection.
 
     """
     filepath_results = scenario_folder + "\\results\\results.xlsx"
@@ -51,20 +51,9 @@ def load_line_load(scenario_folder: str) -> pd.DataFrame:
     line_load[['pLoad_rp' + str(i) for i in range(1, num_rp+1)]] = line_load[['pLoad_rp' + str(i) for i in range(1, num_rp+1)]].abs()
     # calculate maximum of all representative periods
     line_load['max_line_load'] = line_load[['pLoad_rp' + str(i) for i in range(1, num_rp+1)]].max(axis=1)
+    options_network = [{'label': 'rp' + str(i), 'value': i} for i in range(1, num_rp+1)]
 
-    return line_load
-
-def load_generation(scenario_folder: str) -> pd.DataFrame:
-    """
-    Load the generation data from the scenario folder.
-
-    :param scenario_folder: The folder of the scenario.
-
-    :return: The generation data.
-
-    """
-
-    return None
+    return line_load, options_network
 
 def load_total_energy(scenario_folder: str) -> pd.DataFrame:
 
