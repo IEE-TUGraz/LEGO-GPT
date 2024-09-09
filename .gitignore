@@ -38,3 +38,6 @@ __pycache__/
 # Dummy data files
 
 examples/
+
+hover.py
+dash_test.py
