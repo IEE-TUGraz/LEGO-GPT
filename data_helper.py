@@ -74,3 +74,20 @@ def load_total_energy(scenario_folder: str) -> pd.DataFrame:
     df.rename(columns={'Unnamed: 1': 'k'}, inplace=True)
 
     return df
+
+def load_storage_level(scenario_folder: str) -> pd.DataFrame:
+    """
+    Load the storage level data from the scenario folder.
+
+    :param scenario_folder: The folder of the scenario.
+
+    :return: The storage level data.
+
+    """
+
+    filepath_results = scenario_folder + "\\results\\results.xlsx"
+    df = pd.read_excel(filepath_results, sheet_name='StLevel', skiprows=0, header=0)
+    # rename 'Unnamed: 0' to 'rp'
+    df.rename(columns={'Unnamed: 0': 'h'}, inplace=True)
+    
+    return df
