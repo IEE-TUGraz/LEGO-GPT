@@ -4,6 +4,7 @@ import matplotlib.cm as cm
 import plotly.graph_objects as go
 import pandas as pd
 import numpy as np
+import plotly.express as px
 
 
 def plot_energy_sources(scenario_folder: str):
@@ -25,15 +26,39 @@ def plot_energy_sources(scenario_folder: str):
 
     # Add Traces
     for rp in rps:
-        for column in columns:
-            fig.add_trace(
-                go.Scatter(x=list(df[df.rp == rp].k),
-                        y=list(df[df.rp == rp][column]),
-                        name=column,
-                        visible=False if rp != 'rp01' else True))
+        data = df[df.rp == rp]
+        base = 0
+        base_negative = 0
+        for idx, column in enumerate(columns):
+            if column == 'Demand' or column == "Sto_Charge":
+                fig.add_trace(
+                    go.Bar(x=list(data['k']),
+                               y=data[column],
+                               name=column,
+                               base=base_negative,
+                                offsetgroup=0,
+                               visible=False if rp != 'rp01' else True,
+                               hovertext=column,
+                               hoverinfo='text',
+                               ),
+                               )
+                base_negative += data[column]
+                
+            else:
+                fig.add_trace(
 
+
+                go.Bar(x=data['k'], y=data[column], name=column,
+                    base=base,
+                    offsetgroup=0,
+                    visible=False if rp != 'rp01' else True,
+                    hovertext=column,
+                    hoverinfo='text',))
+                
+                base += data[column]
+            
     buttons = []
-
+    
     for i in range(num_rp):
         visibility = np.array([False]*num_rp*len(columns))
         visibility[i*len(columns):(i+1)*len(columns)] = True
@@ -43,16 +68,27 @@ def plot_energy_sources(scenario_folder: str):
                         {'title': 'Energy Sources for rp' + str(i+1)}])
         buttons.append(button)
 
+
+    # modify the bar base of the first trace
+
     fig.update_layout(
         updatemenus=[
             dict(
                 active=0,
                 buttons=buttons,
+          
             )
         ])
+    
 
+
+
+    
     # Set title
     fig.update_layout(title_text="Energy Sources for rp1", title_x=0.5)
+    # disable selection in legend
+    fig.update_layout(legend=dict(traceorder='normal'))
+
 
     return fig
 
