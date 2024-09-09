@@ -10,10 +10,10 @@ from dash import no_update
 
 # ----- Path to the scenario folder -----
 scenario_folder = "C:\\Users\\Kelvin Walenta\\LEGO-GPT\\LEGO-GPT\\examples\\001_Base_Example"
-# ----- Content from experimentation.py -----
 
-results_options = ["Total energy"]
+results_options = ["Total energy", "Storage Level"]
 data_total_energy = dh.load_total_energy(scenario_folder)
+data_storage_level = dh.load_storage_level(scenario_folder)
 
 # ----- Content for the network visualization -----
 data_network, options_network = dh.load_line_load(scenario_folder)
@@ -54,6 +54,8 @@ app.layout = html.Div([
 def update_graph_results(selected_element):
     if selected_element == "Total energy":
         fig = ph.plot_energy_sources(scenario_folder)
+    elif selected_element == "Storage Level":
+        fig = ph.plot_storage_level(scenario_folder)
     return fig
 
 # Callback for the network app
