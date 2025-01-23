@@ -12,6 +12,8 @@ def heatmap(df: pd.DataFrame, maximum_value_for_heatmap: float = None, xcaption:
         "font.family": "serif",
     })
 
+    plt.figure(dpi=600)
+
     # Create color map from
     # IEE grün RGB: 0 128 128
     # TU rot RGB: 247 1 71
@@ -24,11 +26,12 @@ def heatmap(df: pd.DataFrame, maximum_value_for_heatmap: float = None, xcaption:
     ax.hlines([len(df) - 1], *ax.get_xlim(), colors='black', linestyles='dashed')
 
     # Add horizontal lines to make it easier to read
-    # ax.hlines([range(len(df)-2)], *ax.get_xlim(), colors='lightgrey', linestyles='solid')
-    # ax.hlines([len(df)], *ax.get_xlim(), colors='lightgrey', linestyles='solid')
+    ax.hlines([range(len(df)-1)], *ax.get_xlim(), colors='black', linestyles='solid')
+    ax.hlines([0.04, len(df)-0.04], *ax.get_xlim(), colors='black', linestyles='solid') # 0.04 (instead of 0) and maximum-0.04 as positions to have same width for all horizontal lines
 
     # Add vertical lines to make it easier to read
-    # ax.vlines([range(len(df.columns) + 1)], *ax.get_ylim(), colors='lightgrey', linestyles='solid')
+    ax.vlines([range(len(df.columns) + 1)], *ax.get_ylim(), colors='black', linestyles='solid')
+    ax.vlines([0.01, len(df.columns) - 0.01], *ax.get_ylim(), colors='black', linestyles='solid') # 0.01 (instead of 0) and maximum-0.01 as positions to have same width for all horizontal lines
 
     # Move column labels to the top
     plt.tick_params(axis='both', which='major', labelsize=10, labelbottom=False, bottom=False, top=False, labeltop=True)
@@ -66,7 +69,7 @@ def heatmap(df: pd.DataFrame, maximum_value_for_heatmap: float = None, xcaption:
     # Move plot to the right
     ax.figure.subplots_adjust(left=0.2, top=0.9, right=0.98, bottom=0.05)
 
-    plt.show()
+    plt.savefig("heatmap.png", dpi=600)
     print("Done")
 
 
