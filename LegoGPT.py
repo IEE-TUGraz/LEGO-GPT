@@ -1,11 +1,9 @@
 import dash
-from dash import dcc, html, Input, Output, State, ctx
+from dash import dcc, html, Input, Output, ctx
 import dash_leaflet as dl
 import numpy as np
 import pandas as pd
 import plotly.express as px
-from pyomo.environ import value
-import pickle
 import matplotlib.pyplot as plt
 import random
 import sqlite3
