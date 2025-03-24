@@ -105,16 +105,20 @@ class LegoGPT:
 
         #########################################
         # change coords for nicer illustration
-        self.coords.loc["Node_2", "lat"] = 46.557
-        self.coords.loc["Node_2", "lon"] = 14.312
-        self.coords.loc["Node_3", "lat"] = 47.066
-        self.coords.loc["Node_3", "lon"] = 15.441
-        self.coords.loc["Node_4", "lat"] = 48.307
-        self.coords.loc["Node_4", "lon"] = 14.291
-        self.coords.loc["Node_6", "lat"] = 47.561
-        self.coords.loc["Node_6", "lon"] = 14.245
-        self.coords.loc["Node_7", "lat"] = 46.691
-        self.coords.loc["Node_7", "lon"] = 12.802
+        self.coords.loc["Node_1", "lat"] = 47.282375
+        self.coords.loc["Node_1", "lon"] = 11.515182
+        self.coords.loc["Node_2", "lat"] = 46.619764
+        self.coords.loc["Node_2", "lon"] = 14.264140
+        self.coords.loc["Node_3", "lat"] = 47.058254
+        self.coords.loc["Node_3", "lon"] = 15.459140
+        self.coords.loc["Node_4", "lat"] = 48.165895
+        self.coords.loc["Node_4", "lon"] = 14.026583
+        self.coords.loc["Node_5", "lat"] = 48.235050
+        self.coords.loc["Node_5", "lon"] = 16.421530
+        self.coords.loc["Node_6", "lat"] = 47.390257
+        self.coords.loc["Node_6", "lon"] = 13.684453
+        self.coords.loc["Node_7", "lat"] = 46.689913
+        self.coords.loc["Node_7", "lon"] = 12.797455
         # drop node 8 and 9 from i and coords
         self.coords.drop(["Node_8", "Node_9"], inplace=True)
         self.i.drop(self.i[self.i["values"] == "Node_8"].index, inplace=True)
@@ -196,10 +200,10 @@ class LegoGPT:
                         dcc.Dropdown(
                             id="y-axis-dropdown",
                             options=[
-                                {'label': 'Power Flow', 'value': 'power_flow'},
-                                {'label': 'Dispatch', 'value': 'dispatch'},
-                                {'label': 'Demand', 'value': 'demand'},
-                                {'label': 'Storage Intra', 'value': 'storage_intra'}
+                                {'label': 'Y: Power Flow', 'value': 'power_flow'},
+                                {'label': 'Y: Dispatch', 'value': 'dispatch'},
+                                {'label': 'Y: Demand', 'value': 'demand'},
+                                {'label': 'Y: Storage Intra', 'value': 'storage_intra'}
                             ],
                             value='dispatch',
                             clearable=False,
@@ -212,9 +216,9 @@ class LegoGPT:
                         dcc.Dropdown(
                             id="x-axis-dropdown",
                             options=[
-                                {'label': 'Time', 'value': 'time'},
-                                {'label': 'Generator', 'value': 'generator'},
-                                {'label': 'Storage', 'value': 'storage'}
+                                {'label': 'X: Time', 'value': 'time'},
+                                {'label': 'X: Generator', 'value': 'generator'},
+                                {'label': 'X: Storage', 'value': 'storage'}
                             ],
                             value='time',
                             clearable=False,
@@ -256,7 +260,8 @@ class LegoGPT:
                 # Left Section: Map
                 html.Div([
                     dl.Map(children=[
-                        dl.TileLayer(),
+                        dl.TileLayer(url='https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+                                     attribution='&copy; <a href="https://carto.com/">CARTO</a>'),
                         dl.LayerGroup(id="network-layer"),
                     ], bounds=self.bounds, style={'height': '100%', 'width': '100%', 'background-color': '#6BA3A3'}, id="network-map"),
                 ], style={'flex': '1', 'min-width': '0', 'height': '90vh'}),
@@ -316,7 +321,7 @@ class LegoGPT:
                 ) for node in self.coords.itertuples(index=True)
             ]
 
-            return [dl.TileLayer(), dl.LayerGroup(children=polylines + circles, id="network-layer" + str(random.randint(0, 1000)))] # workaround, otherwise objects with same id are not updated!
+            return [dl.TileLayer(url='https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',attribution='&copy; <a href="https://carto.com/">CARTO</a>'), dl.LayerGroup(children=polylines + circles, id="network-layer" + str(random.randint(0, 1000)))] # workaround, otherwise objects with same id are not updated!
 
 
         @self.app.callback(
@@ -414,7 +419,6 @@ class LegoGPT:
                             hover_data={"values": True, "k": True}  # Show values and time on hover
                         )
                         fig.update_layout(title_x=0.5)
-                        # place the legend inside the plot
                         
 
 
@@ -443,6 +447,13 @@ class LegoGPT:
             )
             # update the background color
             fig.update_layout(paper_bgcolor="#E1EDED", plot_bgcolor="#E1EDED")
+            # set the font size
+            fig.update_layout(font_size=14)
+            # set axis labels bold
+            fig.update_layout(
+                xaxis_title_font=dict(size=18, color='black'),  
+                yaxis_title_font=dict(size=18, color='black')
+            )   
 
             return html.Div([dcc.Graph(figure=fig, id="dynamic-plot" + str(random.randint(0, 1000)), style={'height': '100%', 'width': '100%', })], style={'flex': '1', 'min-width': '0', 'height': '90vh', 'margin-top': '0px'})
 
