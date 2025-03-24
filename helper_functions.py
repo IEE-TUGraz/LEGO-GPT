@@ -1,9 +1,7 @@
 import pandas as pd
 def load_lat_lon(filepath: str):
     sheetname = "Power BusInfo"
-    # id_col = "B"
-    # lat_col = "M"
-    # lon_col = "N"
+
     start_row = 7
     df = pd.read_excel(filepath, sheet_name=sheetname, skiprows=start_row-1, header=None)
     df = df[[1, 12, 13]]

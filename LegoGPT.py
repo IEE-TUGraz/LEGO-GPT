@@ -94,7 +94,7 @@ class LegoGPT:
             for idx, line in enumerate(self.la.itertuples(index=False)):
                 if {line.i, line.j} == node_set:
                     # Update the corresponding row in vLineP
-                    self.vLineP.at[row_idx, "line"] = int(idx)  # Use row index from enumerate
+                    self.vLineP.at[row_idx, "line"] = str(int(idx))  # Use row index from enumerate
                     
                     break  # Stop searching once a match is found
 
@@ -123,7 +123,7 @@ class LegoGPT:
         self.i.drop(self.i[self.i["values"] == "Node_9"].index, inplace=True)
         #########################################
 
-    def filter_dataframe(self, attr_str: str, rp: str, scope: str, local_node: str) -> pd.DataFrame:
+    def filter_dataframe(self, attr_str: str, rp: str, scope: str, local_node: str=None, local_line: str=None) -> pd.DataFrame:
         """"
         Filter the dataframe based on the values for rp and k."
         """
@@ -144,7 +144,15 @@ class LegoGPT:
                 df = df[df["i"] == local_node]
             elif scope == "Global":
                 df = df.groupby(["k"]).sum().reset_index()
-        else: df = None
+        elif attr_str == "vLineP":
+            df = self.vLineP
+            if "rp" in df.columns:
+                df = df[df["rp"] == rp]
+            if scope == "Local":
+                df = df[df["line"] == local_line]
+                
+        else: 
+            df = None
             
 
         return df
@@ -201,7 +209,9 @@ class LegoGPT:
                                 {'label': 'Y: Power Flow', 'value': 'power_flow'},
                                 {'label': 'Y: Dispatch', 'value': 'dispatch'},
                                 {'label': 'Y: Demand', 'value': 'demand'},
-                                {'label': 'Y: Storage Intra', 'value': 'storage_intra'}
+                                {'label': 'Y: Storage Intra', 'value': 'storage_intra'},
+
+
                             ],
                             value='dispatch',
                             clearable=False,
@@ -216,7 +226,9 @@ class LegoGPT:
                             options=[
                                 {'label': 'X: Time', 'value': 'time'},
                                 {'label': 'X: Generator', 'value': 'generator'},
-                                {'label': 'X: Storage', 'value': 'storage'}
+                                {'label': 'X: Storage', 'value': 'storage'},
+                                {'label': 'X: Line', 'value': 'line'},
+
                             ],
                             value='time',
                             clearable=False,
@@ -265,12 +277,9 @@ class LegoGPT:
                 ], style={'flex': '1', 'min-width': '0', 'height': '90vh'}),
 
                 # Right Section: Graph
-                html.Div([
-                    html.Div([
-                        dcc.Graph(id="dynamic-plot", style={'width': '100%', 'height': '100%', 'background-color': '#6BA3A3'}), # NOTE: this whole html.Div is replaced in the callback !!
-                    ], id="dynamic-plot-container"),
-                ], style={'flex': '1', 'min-width': '0', 'height': '90vh', 'margin-top': '0px'})
-
+                html.Div([                   
+                    dcc.Graph(id="dynamic-plot", style={'width': '100%', 'height': '100%', 'background-color': '#6BA3A3'}), # NOTE: this whole html.Div is replaced in the callback !!                  
+                ], id="dynamic-plot-container", style={'flex': '1', 'min-width': '0', 'height': '90vh', 'margin-top': '0px'})
             ], style={'display': 'flex', 'gap': '10px', 'height': '90vh', 'flex-wrap': 'wrap'}),
         ], style={"background-color": "#6BA3A3", "padding": "10px"})
 
@@ -300,15 +309,36 @@ class LegoGPT:
             vLineP_filtered = self.vLineP[
                     (self.vLineP["rp"] == selected_period) & (self.vLineP["k"] == selected_time) # NOTE: check if vLineP exists in both directions -> DOES NOT!
                 ]
-
+            print(vLineP_filtered)    
+            positions = []
+            for i, j, flow in zip(vLineP_filtered["i"].values, vLineP_filtered["j"].values, vLineP_filtered["values"].values):
+                if flow < 0: # reverse the direction for the arrows
+                    positions.append([(self.coords.loc[j, 'lat'], self.coords.loc[j, 'lon']), (self.coords.loc[i, 'lat'], self.coords.loc[i, 'lon'])])
+                else:
+                    positions.append([(self.coords.loc[i, 'lat'], self.coords.loc[i, 'lon']), (self.coords.loc[j, 'lat'], self.coords.loc[j, 'lon'])])
+                
             colors = generate_colors(vLineP_filtered)
+
             polylines = [
                 dl.Polyline(
-                    positions=[(self.coords.loc[i, 'lat'], self.coords.loc[i, 'lon']), (self.coords.loc[j, 'lat'], self.coords.loc[j, 'lon'])],
+                    positions=position,
                     color=color, weight=5, id=str(int(line)),
-                    children=dl.Popup(f"Power Flow: {vLineP_filtered.iloc[idx]['values']:.2f} MW"), n_clicks=0
-                ) for idx, (i, j, line, color) in enumerate(zip(vLineP_filtered["i"].values, vLineP_filtered["j"].values, vLineP_filtered["line"].values, colors))
+                    children=dl.Popup(f"Power Flow: {abs(vLineP_filtered.iloc[idx]['values']):.2f} MW"), n_clicks=0
+                ) for idx, (position, line, color) in enumerate(zip(positions, vLineP_filtered["line"].values, colors))
             ]
+            # polylines = [
+            #     dl.Polyline(
+            #         positions=[(self.coords.loc[i, 'lat'], self.coords.loc[i, 'lon']), (self.coords.loc[j, 'lat'], self.coords.loc[j, 'lon'])],
+            #         color=color, weight=5, id=str(int(line)),
+            #         children=dl.Popup(f"Power Flow: {vLineP_filtered.iloc[idx]['values']:.2f} MW"), n_clicks=0
+            #     ) for idx, (i, j, line, color) in enumerate(zip(vLineP_filtered["i"].values, vLineP_filtered["j"].values, vLineP_filtered["line"].values, colors))
+            # ]
+
+            # make arrows using the same color as the line and use PolylineDecorator
+
+            patterns= [[dict(offset='15%', repeat='25%', arrowHead=dict(pixelSize=15, polygon=False, pathOptions=dict(stroke=True, color=color,)))] for color in colors]
+            arrows = [dl.PolylineDecorator(children=polyline, patterns=pattern, n_clicks=0) for polyline, pattern in zip (polylines, patterns)]
+
 
             circles = [
                 dl.CircleMarker(
@@ -319,7 +349,7 @@ class LegoGPT:
                 ) for node in self.coords.itertuples(index=True)
             ]
 
-            return [dl.TileLayer(url='https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',attribution='&copy; <a href="https://carto.com/">CARTO</a>'), dl.LayerGroup(children=polylines + circles, id="network-layer" + str(random.randint(0, 1000)))] # workaround, otherwise objects with same id are not updated!
+            return [dl.TileLayer(url='https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',attribution='&copy; <a href="https://carto.com/">CARTO</a>'), dl.LayerGroup(children=arrows + circles, id="network-layer" + str(random.randint(0, 1000)))] # workaround, otherwise objects with same id are not updated!
 
 
         @self.app.callback(
@@ -372,12 +402,15 @@ class LegoGPT:
             print(f"Updating plot: x_axis={x_axis}, y_axis={y_axis}, selected_period={selected_period}, selected_time={selected_time}")
             print(f"Scope: {scope}")
 
+            fig = None # Initialize figure
+            y_df = None
+
             if y_axis == "demand":
                 y_df = self.filter_dataframe("pDemandP", rp=selected_period, scope=scope, local_node=node_idx)
             elif y_axis == "dispatch":
                 y_df = self.filter_dataframe("vGenP", rp=selected_period, scope=scope, local_node=node_idx)
-            else:
-                y_df = None
+            elif y_axis == "power_flow":
+                y_df = self.filter_dataframe("vLineP", rp=selected_period, scope=scope, local_line=line_idx)
 
             if y_df is not None:
                 if x_axis == "time":
@@ -390,8 +423,7 @@ class LegoGPT:
                             color="g",  # Different colors for each generator
                             title="Global dispatch over time" if scope == "Global" else f"Local dispatch for {node_idx} over time",
                             labels={"k": x_label, "values": "Dispatch", "g": "Generator"},
-                            )
-                        fig.update_layout(title_x=0.5)
+                        )
                     elif y_axis == "demand":
                         fig = px.line(
                             y_df,
@@ -399,10 +431,18 @@ class LegoGPT:
                             y="values",
                             title="Demand Over Time",
                             labels={"i": x_label, "values": "Demand"},
-                            )
-                        fig.update_layout(title_x=0.5)
-                    else:
-                        fig = px.scatter(title="Select a valid combination for the plot").update_layout(title_x=0.5)
+                        )
+                    elif y_axis == "power_flow":
+                        fig = px.line(
+                            y_df,
+                            x="k",  # Use categorical 'k' for x-axis
+                            y="values",
+                            color="line",  # Different colors for each line
+                            title="Power Flow over time" if scope == "Global" else f"Local Power Flow for {line_idx} over time",
+                            labels={"k": x_label, "values": "Power Flow", "line": "Line"},
+                            hover_data={"values": True, "line": True, "i": True, "j": True}  # Show values and line on hover
+                        )
+
 
                 elif x_axis == "generator":
                     x_label = "Generator"
@@ -416,21 +456,28 @@ class LegoGPT:
                             labels={"g": x_label, "values": "Dispatch", "k": "Time"},
                             hover_data={"values": True, "k": True}  # Show values and time on hover
                         )
-                        fig.update_layout(title_x=0.5)
-                        
 
+               
+                elif x_axis == "line":
+                    x_label = "Line"
+                    if y_axis == "power_flow":
+                        # make histogram of all lineflow values
+                        fig = px.histogram(
+                            y_df,
+                            x="values",
+                            color="line",
+                            title="Power Flow Distribution over all Lines" if scope == "Global" else f"Local Power Flow Distribution for {line_idx}",
+                            # labels={"values": "Power Flow", "line": "Line"},
+                            nbins=10,
+                            range_x=[self.vLineP_min, self.vLineP_max]
+                        )
 
-                    else:
-                        fig = px.scatter(title="Select a valid combination for the plot").update_layout(title_x=0.5)
+            # check if a figure fig was created
+            if fig is None:
+                fig = px.scatter(title="Select a valid combination for the plot")
 
-                else:
-                    fig = px.scatter(title="Select a valid combination for the plot").update_layout(title_x=0.5)
-
-
-            else:
-                fig = px.scatter(title="Select a valid combination for the plot").update_layout(title_x=0.5)
-
-
+            # set title center
+            fig.update_layout(title_x=0.5)    
             # Fix the plot size (domain of axes) to a specific portion of the figure
             fig.update_layout(
                 xaxis=dict(domain=[0, 0.85]),  # Plot takes 90% of the width
