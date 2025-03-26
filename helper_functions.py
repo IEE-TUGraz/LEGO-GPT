@@ -192,8 +192,5 @@ def extract_excel_to_dataframe(filepath_lego, table):
         return df 
 
 
-filepath_lego = "C:\\Users\\Kelvin Walenta\\LEGO-GPT\\Robert\\AT+Neighbours\\"
-table = "k"
-
-df = extract_excel_to_dataframe(filepath_lego, table) # Expected output: DataFrame with one column named "values" containing the values from the "Power_BusInfo.xlsx" file.
-print(df.head()) # Expected output: First 5 rows of the DataFrame.
+# df = extract_excel_to_dataframe(filepath_lego, table) # Expected output: DataFrame with one column named "values" containing the values from the "Power_BusInfo.xlsx" file.
+# print(df.head()) # Expected output: First 5 rows of the DataFrame.

@@ -74,7 +74,7 @@ class LegoGPT:
             self.vLineP.rename(columns={"level_2": "i"}, inplace=True)
             self.vLineP.rename(columns={"level_3": "j"}, inplace=True)
             self.vLineP.rename(columns={"level_4": "c"}, inplace=True)
-
+            print(self.i.values[0][0])
             # Iterate over vLineP DataFrame
             for row_idx, row in enumerate(self.vLineP.itertuples(index=True)):  # Keep index for modification
                 node_set = {row.i, row.j}  # Use set for order-independent comparison
@@ -206,7 +206,8 @@ class LegoGPT:
 
     def setup_layout(self):
         """ Define app layout. """
-
+        self.long_format = False
+        display_long = 'none'
         # check length of rp and k
         if len(self.rp) == 1 and len(self.k) > 24:
             print("Only one rp and more than 24 k values. Switching to different layout.")
@@ -336,7 +337,7 @@ class LegoGPT:
             }),
 
             dcc.Store(id="last-clicked-line", data=self.la.index[0]),
-            dcc.Store(id="last-clicked-node", data=self.i.values[0]),
+            dcc.Store(id="last-clicked-node", data=self.i["values"][0]),
 
             # === MAIN SECTION: Map + Graph ===
             html.Div([
@@ -383,6 +384,7 @@ class LegoGPT:
             vLineP_filtered = self.vLineP[
                     (self.vLineP["rp"] == selected_period) & (self.vLineP["k"] == selected_time) # NOTE: check if vLineP exists in both directions -> DOES NOT!
                 ]
+
             positions = []
             for i, j, flow in zip(vLineP_filtered["i"].values, vLineP_filtered["j"].values, vLineP_filtered["values"].values):
                 if flow < 0: # reverse the direction for the arrows
@@ -399,20 +401,13 @@ class LegoGPT:
                     children=dl.Popup(f"Power Flow: {abs(vLineP_filtered.iloc[idx]['values']):.2f} MW"), n_clicks=0
                 ) for idx, (position, line, color) in enumerate(zip(positions, vLineP_filtered["line"].values, colors))
             ]
-            # polylines = [
-            #     dl.Polyline(
-            #         positions=[(self.coords.loc[i, 'lat'], self.coords.loc[i, 'lon']), (self.coords.loc[j, 'lat'], self.coords.loc[j, 'lon'])],
-            #         color=color, weight=5, id=str(int(line)),
-            #         children=dl.Popup(f"Power Flow: {vLineP_filtered.iloc[idx]['values']:.2f} MW"), n_clicks=0
-            #     ) for idx, (i, j, line, color) in enumerate(zip(vLineP_filtered["i"].values, vLineP_filtered["j"].values, vLineP_filtered["line"].values, colors))
-            # ]
 
             # make arrows using the same color as the line and use PolylineDecorator
 
             patterns= [[dict(offset='15%', repeat='25%', arrowHead=dict(pixelSize=15, polygon=False, pathOptions=dict(stroke=True, color=color,)))] for color in colors]
             arrows = [dl.PolylineDecorator(children=polyline, patterns=pattern, n_clicks=0) for polyline, pattern in zip (polylines, patterns)]
-
-
+            print(len(arrows))
+            print(arrows)   
             circles = [
                 dl.CircleMarker(
                     center=(node.lat, node.lon),
@@ -577,7 +572,7 @@ class LegoGPT:
 
     def run(self):
         """ Start the Dash server. """
-        self.app.run_server(debug=True)
+        self.app.run(debug=True)
 
 if __name__ == "__main__":
     input_type = "excel"
