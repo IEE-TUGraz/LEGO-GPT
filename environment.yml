@@ -3,13 +3,17 @@ channels:
   - defaults
   - conda-forge
 dependencies:
-  - dash=3.0.0
+  - dash=2.18.2
   - dash-leaflet=1.0.15
   - matplotlib=3.10.1
-  - numpy=2.2.4
   - narwhals=1.32.0
+  - openpyxl=3.1.5
   - pandas=2.2.3
   - pip=25.0
   - plotly=6.0.1
   - python=3.12.2
+
+
   
+  
+
