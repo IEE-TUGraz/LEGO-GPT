@@ -10,34 +10,121 @@ import sqlite3
 import helper_functions as h
 
 class LegoGPT:
-    def __init__(self):
-        self.load_data()  # Load data on initialization
+    def __init__(self, input_type: str):
+
+        # check if input_type is valid
+        if input_type not in ["excel", "sqlite"]:
+            raise ValueError("Invalid input type. Please choose either 'excel' or 'sqlite'.")
+        # self.long_format = False
+        self.load_data(input_type)  # Load data on initialization
         self.modify_data()
         self.create_app()  # Initialize Dash app
         self.setup_layout()  # Define layout
         self.setup_callbacks()  # Define callbacks
         
-    def load_data(self):
+    def load_data(self, input_type: str):
         """ Load network data from LEGO results file. """
 
-        filepath_lego = "C:\\Users\\Kelvin Walenta\\LEGO-Pyomo\\results\\result.sqlite"
-        filepath_coords = "C:\\Users\\Kelvin Walenta\\LEGO-Pyomo\\data\\example\\Power_BusInfo.xlsx"
+        # filepath_lego = "C:\\Users\\Kelvin Walenta\\LEGO-Pyomo\\results\\result.sqlite"
+        # filepath_coords = "C:\\Users\\Kelvin Walenta\\LEGO-Pyomo\\data\\example\\Power_BusInfo.xlsx"
 
-        tables = ["rp", "k", "i", "g", "gi", "le", "la", "lc", "vLineP", "vGenP","vStIntraRes", "vStInterRes", "pDemandP"]
-
-        # connect to the database
-        conn = sqlite3.connect(filepath_lego)
-        # print out all tables in the database
-        # cursor = conn.cursor()
-        # cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
-        # print(cursor.fetchall())
+        filepath_lego = "C:\\Users\\Kelvin Walenta\\LEGO-GPT\\Robert\\AT+Neighbours\\"
+        filepath_coords = filepath_lego + "Power_BusInfo.xlsx"
 
 
-        for table in tables:
-            # load the data as variable with the table name
-            setattr(self, table, h.extract_table_to_dataframe(conn, table))
+        tables = ["rp", "k", "i", "g", "gi", "la", "vLineP", "vGenP","vStIntraRes", "vStInterRes", "pDemandP"]
+
+        if input_type == "sqlite":
+            # connect to the database
+            conn = sqlite3.connect(filepath_lego)
+            # print out all tables in the database
+            # cursor = conn.cursor()
+            # cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+            # print(cursor.fetchall())
+
+
+            for table in tables:
+                # load the data as variable with the table name
+                setattr(self, table, h.extract_table_to_dataframe(conn, table))
             
-        self.coords = h.load_lat_lon(filepath_coords)
+            # region remove unnecessary index column in sets
+            self.rp.drop(columns=["index"], inplace=True)
+            self.rp.rename(columns={"0": "values"}, inplace=True)
+
+            self.k.drop(columns=["index"], inplace=True)
+            self.k.rename(columns={"0": "values"}, inplace=True)
+
+            self.i.drop(columns=["index"], inplace=True)    
+            self.i.rename(columns={"0": "values"}, inplace=True)
+
+            self.g.drop(columns=["index"], inplace=True)
+            self.g.rename(columns={"0": "values"}, inplace=True)
+
+            self.gi.rename(columns={"0": "g"}, inplace=True)
+            self.gi.rename(columns={"1": "i"}, inplace=True)
+            self.gi.drop(columns=["index"], inplace=True)
+
+            self.la.drop(columns=["index"], inplace=True)
+            self.la.rename(columns={"0": "i"}, inplace=True)
+            self.la.rename(columns={"1": "j"}, inplace=True)
+            self.la.rename(columns={"2": "c"}, inplace=True)
+
+            self.vLineP.rename(columns={"level_0": "rp"}, inplace=True)
+            self.vLineP.rename(columns={"level_1": "k"}, inplace=True)
+            self.vLineP.rename(columns={"level_2": "i"}, inplace=True)
+            self.vLineP.rename(columns={"level_3": "j"}, inplace=True)
+            self.vLineP.rename(columns={"level_4": "c"}, inplace=True)
+
+            # Iterate over vLineP DataFrame
+            for row_idx, row in enumerate(self.vLineP.itertuples(index=True)):  # Keep index for modification
+                node_set = {row.i, row.j}  # Use set for order-independent comparison
+
+                # Iterate over self.la DataFrame to find the matching line
+                for idx, line in enumerate(self.la.itertuples(index=False)):
+                    if {line.i, line.j} == node_set:
+                        # Update the corresponding row in vLineP
+                        self.vLineP.at[row_idx, "line"] = str(int(idx))  # Use row index from enumerate
+                        break  # Stop searching once a match is found
+
+
+                
+            self.coords = h.load_lat_lon(filepath_coords)
+
+        elif input_type == "excel":
+            for table in tables:
+                print(f"Loading table {table}...")
+                if table == "vLineP":
+                    df, df_lines = h.extract_excel_to_dataframe(filepath_lego, table)
+                    self.vLineP = df
+                    self.la = df_lines
+                elif table == "gi":
+                    df, df_g = h.extract_excel_to_dataframe(filepath_lego, table)
+                    self.gi = df
+                    self.g = df_g
+                elif table == "la" or table == "g": # get from other dataframe
+                    continue
+                else:
+                    # load the data as variable with the table name
+                    setattr(self, table, h.extract_excel_to_dataframe(filepath_lego, table))
+            self.coords = h.extract_excel_to_dataframe(filepath_lego, "coords")
+
+
+            # only take rows where i and j are in this exact order
+            # only take values where duplicate is False
+            self.vLineP = self.vLineP[self.vLineP["duplicate"] == False]
+            # drop duplicate column
+            self.vLineP.drop(columns=["duplicate"], inplace=True)
+
+
+            # drop where everything except value is the same
+
+            # save to csv
+            self.vLineP.to_csv("vLineP.csv", index=False)
+            
+                
+
+        else:
+            raise ValueError("Invalid input type. Please choose either 'excel' or 'sqlite'.")
 
         # Compute bounds for map display
         self.bounds = [
@@ -48,80 +135,31 @@ class LegoGPT:
     def modify_data(self):
         """ Modify data such as column names etc. """
 
-        # region remove unnecessary index column in sets
-        self.rp.drop(columns=["index"], inplace=True)
-        self.rp.rename(columns={"0": "values"}, inplace=True)
 
-        self.k.drop(columns=["index"], inplace=True)
-        self.k.rename(columns={"0": "values"}, inplace=True)
-
-        self.i.drop(columns=["index"], inplace=True)    
-        self.i.rename(columns={"0": "values"}, inplace=True)
-
-        self.g.drop(columns=["index"], inplace=True)
-        self.g.rename(columns={"0": "values"}, inplace=True)
-
-        self.gi.rename(columns={"0": "g"}, inplace=True)
-        self.gi.rename(columns={"1": "i"}, inplace=True)
-
-        self.le.drop(columns=["index"], inplace=True)
-        self.le.rename(columns={"0": "i"}, inplace=True)
-        self.le.rename(columns={"1": "j"}, inplace=True)
-        self.le.rename(columns={"2": "c"}, inplace=True)
-
-        self.la.drop(columns=["index"], inplace=True)
-        self.la.rename(columns={"0": "i"}, inplace=True)
-        self.la.rename(columns={"1": "j"}, inplace=True)
-        self.la.rename(columns={"2": "c"}, inplace=True)
-
-        # endregion
-
-        # region vLineP
-        self.vLineP.rename(columns={"level_0": "rp"}, inplace=True)
-        self.vLineP.rename(columns={"level_1": "k"}, inplace=True)
-        self.vLineP.rename(columns={"level_2": "i"}, inplace=True)
-        self.vLineP.rename(columns={"level_3": "j"}, inplace=True)
-        self.vLineP.rename(columns={"level_4": "c"}, inplace=True)
         self.vLineP_max = self.vLineP["values"].max()
         self.vLineP_min = self.vLineP["values"].min()
 
-
-        # Iterate over vLineP DataFrame
-        for row_idx, row in enumerate(self.vLineP.itertuples(index=True)):  # Keep index for modification
-            node_set = {row.i, row.j}  # Use set for order-independent comparison
-
-            # Iterate over self.le DataFrame to find the matching line
-            for idx, line in enumerate(self.la.itertuples(index=False)):
-                if {line.i, line.j} == node_set:
-                    # Update the corresponding row in vLineP
-                    self.vLineP.at[row_idx, "line"] = str(int(idx))  # Use row index from enumerate
-                    
-                    break  # Stop searching once a match is found
-
-        # endregion
-
-
-        #########################################
-        # change coords for nicer illustration
-        self.coords.loc["Node_1", "lat"] = 47.282375
-        self.coords.loc["Node_1", "lon"] = 11.515182
-        self.coords.loc["Node_2", "lat"] = 46.619764
-        self.coords.loc["Node_2", "lon"] = 14.264140
-        self.coords.loc["Node_3", "lat"] = 47.058254
-        self.coords.loc["Node_3", "lon"] = 15.459140
-        self.coords.loc["Node_4", "lat"] = 48.165895
-        self.coords.loc["Node_4", "lon"] = 14.026583
-        self.coords.loc["Node_5", "lat"] = 48.235050
-        self.coords.loc["Node_5", "lon"] = 16.421530
-        self.coords.loc["Node_6", "lat"] = 47.390257
-        self.coords.loc["Node_6", "lon"] = 13.684453
-        self.coords.loc["Node_7", "lat"] = 46.689913
-        self.coords.loc["Node_7", "lon"] = 12.797455
-        # drop node 8 and 9 from i and coords
-        self.coords.drop(["Node_8", "Node_9"], inplace=True)
-        self.i.drop(self.i[self.i["values"] == "Node_8"].index, inplace=True)
-        self.i.drop(self.i[self.i["values"] == "Node_9"].index, inplace=True)
-        #########################################
+        # #########################################
+        # # change coords for nicer illustration
+        # self.coords.loc["Node_1", "lat"] = 47.282375
+        # self.coords.loc["Node_1", "lon"] = 11.515182
+        # self.coords.loc["Node_2", "lat"] = 46.619764
+        # self.coords.loc["Node_2", "lon"] = 14.264140
+        # self.coords.loc["Node_3", "lat"] = 47.058254
+        # self.coords.loc["Node_3", "lon"] = 15.459140
+        # self.coords.loc["Node_4", "lat"] = 48.165895
+        # self.coords.loc["Node_4", "lon"] = 14.026583
+        # self.coords.loc["Node_5", "lat"] = 48.235050
+        # self.coords.loc["Node_5", "lon"] = 16.421530
+        # self.coords.loc["Node_6", "lat"] = 47.390257
+        # self.coords.loc["Node_6", "lon"] = 13.684453
+        # self.coords.loc["Node_7", "lat"] = 46.689913
+        # self.coords.loc["Node_7", "lon"] = 12.797455
+        # # drop node 8 and 9 from i and coords
+        # self.coords.drop(["Node_8", "Node_9"], inplace=True)
+        # self.i.drop(self.i[self.i["values"] == "Node_8"].index, inplace=True)
+        # self.i.drop(self.i[self.i["values"] == "Node_9"].index, inplace=True)
+        # #########################################
 
     def filter_dataframe(self, attr_str: str, rp: str, scope: str, local_node: str=None, local_line: str=None) -> pd.DataFrame:
         """"
@@ -130,14 +168,17 @@ class LegoGPT:
 
         if attr_str == "vGenP":
             df = self.vGenP
+            if df is None: # in case the attribute exits but is not loaded
+                return None
             if "rp" in df.columns:
                 df = df[df["rp"] == rp]
             if scope == "Local":
-                
                 g_local = self.gi[self.gi["i"] == local_node]
                 df = df[df["g"].isin(g_local["g"])]
         elif attr_str == "pDemandP":
             df = self.pDemandP
+            if df is None:
+                return None
             if "rp" in df.columns:
                 df = df[df["rp"] == rp]
             if scope == "Local":
@@ -146,6 +187,8 @@ class LegoGPT:
                 df = df.groupby(["k"]).sum().reset_index()
         elif attr_str == "vLineP":
             df = self.vLineP
+            if df is None:
+                return None
             if "rp" in df.columns:
                 df = df[df["rp"] == rp]
             if scope == "Local":
@@ -163,6 +206,14 @@ class LegoGPT:
 
     def setup_layout(self):
         """ Define app layout. """
+
+        # check length of rp and k
+        if len(self.rp) == 1 and len(self.k) > 24:
+            print("Only one rp and more than 24 k values. Switching to different layout.")
+            self.long_format = True
+            display_long = 'block' if self.long_format else 'none'
+
+
         self.app.layout = html.Div([
 
             # === GLOBAL TOP CONTROLS ROW (RP dropdown + Slider on left, Axis dropdowns + Button on right) ===
@@ -186,7 +237,9 @@ class LegoGPT:
                             min=1,
                             max=len(self.k),
                             step=1,
-                            marks={k: {'label': str(k) } for k in self.k}, # fonttstyle set in css file
+                            # marks={k: {'label': str(k) } for k in self.k}, # fonttstyle set in css file
+                            marks=None if self.long_format else {k: {'label': str(k) } for k in self.k},
+                            tooltip={"placement": "top", "always_visible": True},
                             value=1,
                         ),
                     ], style={'flex': '1'}),
@@ -238,7 +291,7 @@ class LegoGPT:
 
                     html.Div([
                         # html.Label("Scope:", style={'font-weight': 'bold'}),
-                        html.Button("Global", id="local-button", n_clicks=0, style={
+                        html.Button("Local", id="local-button", n_clicks=0, style={
                             'minWidth': '80px',
                             'padding': '6px 12px',
                             'display': 'flex',
@@ -246,6 +299,27 @@ class LegoGPT:
                             'font-weight': 'bold',
                         }),
                     ]),
+                    # add additional slider for the range of k values if long format
+                    html.Div([
+                        dcc.RangeSlider(
+                            id='time-slider-range',
+                            min=1,
+                            max=len(self.k),
+                            step=1,
+                            marks=None,
+                            tooltip={"placement": "top", "always_visible": True},
+                            #allowCross=False,
+                            value=[1, 24],
+                            pushable=24,
+                            
+                        ),
+
+                    ], style={'margin-right': '10px', "flex": "1","display": display_long}),
+
+
+
+
+
                 ], style={
                     'display': 'flex',
                     'align-items': 'center',
@@ -261,7 +335,7 @@ class LegoGPT:
                 'flex-wrap': 'wrap'
             }),
 
-            dcc.Store(id="last-clicked-line", data=self.le.index[0]),
+            dcc.Store(id="last-clicked-line", data=self.la.index[0]),
             dcc.Store(id="last-clicked-node", data=self.i.values[0]),
 
             # === MAIN SECTION: Map + Graph ===
@@ -309,7 +383,6 @@ class LegoGPT:
             vLineP_filtered = self.vLineP[
                     (self.vLineP["rp"] == selected_period) & (self.vLineP["k"] == selected_time) # NOTE: check if vLineP exists in both directions -> DOES NOT!
                 ]
-            print(vLineP_filtered)    
             positions = []
             for i, j, flow in zip(vLineP_filtered["i"].values, vLineP_filtered["j"].values, vLineP_filtered["values"].values):
                 if flow < 0: # reverse the direction for the arrows
@@ -381,9 +454,9 @@ class LegoGPT:
         )
         def toggle_button_label(n_clicks):
             if n_clicks % 2 == 0:
-                return "Global"
-            else:
                 return "Local"
+            else:
+                return "Global"
 
 
         @self.app.callback(
@@ -454,7 +527,7 @@ class LegoGPT:
                             color="g",  # Different colors for each generator
                             title="Global dispatch for each generator" if scope == "Global" else f"Local dispatch for {node_idx}",
                             labels={"g": x_label, "values": "Dispatch", "k": "Time"},
-                            hover_data={"values": True, "k": True}  # Show values and time on hover
+                            hover_data={"values": False, "k": False}  # Show values and time on hover
                         )
 
                
@@ -507,4 +580,5 @@ class LegoGPT:
         self.app.run_server(debug=True)
 
 if __name__ == "__main__":
-    LegoGPT().run()
+    input_type = "excel"
+    LegoGPT(input_type).run()
