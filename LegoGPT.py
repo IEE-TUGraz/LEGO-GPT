@@ -24,21 +24,20 @@ class LegoGPT:
         self.create_app()  # Initialize Dash app
         self.setup_layout()  # Define layout
         self.setup_callbacks()  # Define callbacks
-
-        
+     
     def load_data(self, ):
         """ Load network data from LEGO results file. """
 
         filepath_coords = os.path.join(self.filepath_lego, "Power_BusInfo.xlsx")
-        tables = ["rp", "k", "i", "g", "gi", "la", "vLineP", "vGenP","vStIntraRes", "vStInterRes", "pDemandP"]
+        tables = ["rp", "k", "i", "g", "gi", "la", "vLineP", "vGenP","vStIntraRes", "vStInterRes", "pDemandP", "pPmax"]
 
         if input_type == "sqlite":
             # connect to the database
             conn = sqlite3.connect(os.path.join(self.filepath_lego + "result.sqlite"))
             # print out all tables in the database
-            # cursor = conn.cursor()
-            # cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
-            # print(cursor.fetchall())
+            cursor = conn.cursor()
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+            print(cursor.fetchall())
 
 
             for table in tables:
@@ -67,6 +66,10 @@ class LegoGPT:
             self.la.rename(columns={"1": "j"}, inplace=True)
             self.la.rename(columns={"2": "c"}, inplace=True)
 
+            self.pPmax.rename(columns={"level_0": "i"}, inplace=True)
+            self.pPmax.rename(columns={"level_1": "j"}, inplace=True)
+            self.pPmax.rename(columns={"level_2": "c"}, inplace=True)
+
             self.vLineP.rename(columns={"level_0": "rp"}, inplace=True)
             self.vLineP.rename(columns={"level_1": "k"}, inplace=True)
             self.vLineP.rename(columns={"level_2": "i"}, inplace=True)
@@ -83,7 +86,7 @@ class LegoGPT:
                         self.vLineP.at[row_idx, "line"] = str(int(idx))  # Use row index from enumerate
                         break  # Stop searching once a match is found
             self.coords = h.load_lat_lon(filepath_coords)
-
+            
 
         elif input_type == "excel":
             for table in tables:
@@ -111,8 +114,6 @@ class LegoGPT:
 
             # drop where everything except value is the same
 
-            # save to csv
-            self.vLineP.to_csv("vLineP.csv", index=False)
                            
         else:
             raise ValueError("Invalid input type. Please choose either 'excel' or 'sqlite'.")
@@ -122,12 +123,31 @@ class LegoGPT:
         self.i = pd.merge(self.i, self.coords, left_on="values", right_on="values", how="left")
         # set the index to the values column
         self.i.set_index("values", inplace=True)
+
+        # iterate over pPmax and add the line number to the dataframe
+        for row_idx, row in enumerate(self.pPmax.itertuples(index=True)):  # Keep index for modification
+            node_set = {row.i, row.j}  # Use set for order-independent comparison
+
+            # Iterate over self.la DataFrame to find the matching line
+            for idx, line in enumerate(self.la.itertuples(index=False)):
+                if {line.i, line.j} == node_set:
+                    # Update the corresponding row in vLineP
+                    self.pPmax.at[row_idx, "line"] = str(int(idx))
+                    break  # Stop searching once a match is found
+
         # Compute bounds for map display
         self.bounds = [
             [min(self.i['lat']), min(self.i['lon'])],
             [max(self.i['lat']), max(self.i['lon'])]
         ]
 
+        # add to every line in vLineP the value divided by pPmax
+        self.vLineP["rel_values"] = abs(self.vLineP["values"]) / self.vLineP["line"].map(
+            self.pPmax.set_index("line")["values"]
+        )
+        self.vLineP["pPmax"] = self.vLineP["line"].map(
+            self.pPmax.set_index("line")["values"]
+        )
         self.vLineP_max = self.vLineP["values"].max()
         self.vLineP_min = self.vLineP["values"].min()   
 
@@ -353,7 +373,7 @@ class LegoGPT:
                                      attribution='&copy; <a href="https://carto.com/">CARTO</a>'),
                         dl.LayerGroup(id="network-layer"),
                     ], bounds=self.bounds, style={'height': '100%', 'width': '100%', 'background-color': '#6BA3A3'}, id="network-map",
-                    zoom=7, center=[np.mean(self.i['lat']), np.mean(self.i['lon'])]),
+                    zoom=6, center=[np.mean(self.i['lat']), np.mean(self.i['lon'])]),
                 ], style={'flex': '1', 'min-width': '0', 'height': '90vh'}),
 
                 # Right Section: Graph
@@ -378,9 +398,8 @@ class LegoGPT:
             # colors = self.generate_colors(selected_period, selected_time)
 
             def generate_colors(vLineP_filtered):
-                color_values = vLineP_filtered["values"].to_numpy()
-                # scale to min/max of the entire dataset
-                color_values = (color_values - self.vLineP_min) / (self.vLineP_max - self.vLineP_min)
+                color_values = vLineP_filtered["rel_values"].to_numpy()
+
                 color_map = plt.get_cmap('RdYlGn_r')
                 return [
                     "#{:02x}{:02x}{:02x}".format(int(255 * c[0]), int(255 * c[1]), int(255 * c[2]))
@@ -405,7 +424,10 @@ class LegoGPT:
                 dl.Polyline(
                     positions=position,
                     color=color, weight=5, id=str(int(line)),
-                    children=dl.Popup(f"Power Flow: {abs(vLineP_filtered.iloc[idx]['values']):.2f} MW"), n_clicks=0
+                    children=[
+                        dl.Popup(f"Power Flow: {abs(vLineP_filtered.iloc[idx]['values']):.2f} MW, Line rating: {vLineP_filtered.iloc[idx]['pPmax']:.2f} MW"),
+                    ],
+                    n_clicks=0
                 ) for idx, (position, line, color) in enumerate(zip(positions, vLineP_filtered["line"].values, colors))
             ]
 
@@ -438,7 +460,6 @@ class LegoGPT:
             ]
 
             return [dl.TileLayer(url='https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',attribution='&copy; <a href="https://carto.com/">CARTO</a>'), dl.LayerGroup(children=arrows + circles, id="network-layer" + str(random.randint(0, 1000)))] # workaround, otherwise objects with same id are not updated!
-
 
         @self.app.callback(
             Output("last-clicked-line", "data"),

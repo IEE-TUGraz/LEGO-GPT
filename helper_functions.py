@@ -178,6 +178,15 @@ def extract_excel_to_dataframe(filepath_lego, table):
         # Step 4: Create final DataFrame
         df = pd.DataFrame.from_records(records)
 
+    elif table == "pPmax":
+        filename = os.path.join(filepath_lego, "Power_Network.xlsx")
+        sheetname = "Power Network"
+
+        start_row = 7
+        use_cols = "B,C,K"
+        df = pd.read_excel(filename, sheet_name=sheetname, skiprows=start_row-1, usecols=use_cols, header=None)
+        df.columns = ["i", "j", "values"]
+
     elif table == "pDemand":
         pass
 
