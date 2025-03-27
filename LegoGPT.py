@@ -341,6 +341,7 @@ class LegoGPT:
 
             dcc.Store(id="last-clicked-line", data=self.la.index[0]),
             dcc.Store(id="last-clicked-node", data=self.i.index[0]),
+            dcc.Store(id="map-zoom", data=7),  # Default zoom
 
             # === MAIN SECTION: Map + Graph ===
             html.Div([
@@ -351,7 +352,8 @@ class LegoGPT:
                         dl.TileLayer(url='https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
                                      attribution='&copy; <a href="https://carto.com/">CARTO</a>'),
                         dl.LayerGroup(id="network-layer"),
-                    ], bounds=self.bounds, style={'height': '100%', 'width': '100%', 'background-color': '#6BA3A3'}, id="network-map"),
+                    ], bounds=self.bounds, style={'height': '100%', 'width': '100%', 'background-color': '#6BA3A3'}, id="network-map",
+                    zoom=7, center=[np.mean(self.i['lat']), np.mean(self.i['lon'])]),
                 ], style={'flex': '1', 'min-width': '0', 'height': '90vh'}),
 
                 # Right Section: Graph
@@ -367,10 +369,12 @@ class LegoGPT:
         @self.app.callback(
             Output("network-map", "children"),  
             [Input("rep-period-dropdown", "value"),
-             Input("time-slider", "value")
-            ]          
+             Input("time-slider", "value"),
+             Input("map-zoom", "data")
+            ],          
+             # prevent_initial_call=True
         )
-        def update_network(selected_period, selected_time):
+        def update_network(selected_period, selected_time, zoom_level):
             # colors = self.generate_colors(selected_period, selected_time)
 
             def generate_colors(vLineP_filtered):
@@ -407,7 +411,22 @@ class LegoGPT:
 
             # make arrows using the same color as the line and use PolylineDecorator
 
-            patterns= [[dict(offset='15%', repeat='25%', arrowHead=dict(pixelSize=15, polygon=False, pathOptions=dict(stroke=True, color=color,)))] for color in colors]
+            def get_arrow_size(zoom):
+                # Adjust sensitivity if needed
+                if zoom == None:
+                    zoom =7
+                if zoom < 5:
+                    return 0
+                return max(10, int(zoom * 2))
+
+            print(f"Zoom level: {zoom_level}")
+            arrow_size = get_arrow_size(zoom_level)
+
+            patterns = [[dict(offset='50%', repeat='25%', arrowHead=dict(
+                pixelSize=arrow_size,
+                polygon=False,
+                pathOptions=dict(stroke=True, color=color)
+            ))] for color in colors]
             arrows = [dl.PolylineDecorator(children=polyline, patterns=pattern, n_clicks=0) for polyline, pattern in zip (polylines, patterns)]
             circles = [
                 dl.CircleMarker(
@@ -432,7 +451,6 @@ class LegoGPT:
             clicked_id = ctx.triggered[0]['prop_id'].split('.')[0]
             return clicked_id
 
-
         @self.app.callback(
             Output("last-clicked-node", "data"),
             [Input(node.Index, "n_clicks") for node in self.i.itertuples(index=True)]
@@ -442,6 +460,7 @@ class LegoGPT:
                 return None
             clicked_id = ctx.triggered[0]['prop_id'].split('.')[0]
             return clicked_id
+        
         @self.app.callback(
             Output("time-slider", "value"),
             Output("time-slider-input", "value"),
@@ -458,8 +477,7 @@ class LegoGPT:
                 return slider_val, slider_val
             else:
                 return input_val, input_val
-
-                
+               
         @self.app.callback(
             Output("local-button", "children"),
             Input("local-button", "n_clicks")
@@ -470,6 +488,12 @@ class LegoGPT:
             else:
                 return "Global"
 
+        @self.app.callback(
+            Output("map-zoom", "data"),
+            Input("network-map", "zoom")
+        )
+        def store_map_zoom(zoom_level):
+            return zoom_level
 
         @self.app.callback(
             Output("dynamic-plot-container", "children"),
@@ -480,6 +504,7 @@ class LegoGPT:
              Input("rep-period-dropdown", "value"),
              Input("local-button", "children"),
              Input("time-slider-range", "value")],
+             # prevent_initial_call=True
 
         )
         def update_dynamic_plot(x_axis, y_axis, line_idx, node_idx, selected_period, scope, time_range):
@@ -504,9 +529,7 @@ class LegoGPT:
                     x_label = "Time"
                     if y_axis == "dispatch":
                         title = "Global dispatch over time" if scope == "Global" else f"Local dispatch for {node_idx} over time"
-                        y_df["k"] = y_df["k"].astype(str)
-                        y_df["g"] = y_df["g"].astype(str)
-                        y_df["values"] = pd.to_numeric(y_df["values"], errors="coerce")
+
                         fig = px.area(
                             y_df,
                             x="k",  # Use categorical 'k' for x-axis
@@ -538,6 +561,9 @@ class LegoGPT:
                 elif x_axis == "generator":
                     x_label = "Generator"
                     if y_axis == "dispatch":
+                        y_df["k"] = y_df["k"].astype(str)
+                        y_df["g"] = y_df["g"].astype(str)
+                        y_df["values"] = pd.to_numeric(y_df["values"], errors="coerce")
                         fig = px.bar(
                             y_df,
                             x="g",  # Use categorical 'g' for x-axis
@@ -601,6 +627,6 @@ if __name__ == "__main__":
 
     input_type = "excel"
     # input_type = "sqlite"
-    filepath_lego = "C:\\Users\\Kelvin Walenta\\LEGO-GPT\\examples\\"
+    # filepath_lego = "C:\\Users\\Kelvin Walenta\\LEGO-GPT\\examples\\"
     filepath_lego = "C:\\Users\\Kelvin Walenta\\LEGO-GPT\\Robert\\LEGO_data_TYNDP_AT_Neighbours"
     LegoGPT(input_type=input_type, filepath_lego=filepath_lego).run()
