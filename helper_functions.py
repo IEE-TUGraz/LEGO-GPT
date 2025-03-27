@@ -1,13 +1,12 @@
 import pandas as pd
+import os
 def load_lat_lon(filepath: str):
     sheetname = "Power BusInfo"
 
     start_row = 7
     df = pd.read_excel(filepath, sheet_name=sheetname, skiprows=start_row-1, header=None)
     df = df[[1, 12, 13]]
-    df.columns = ["id", "lat", "lon"]
-    # set index to id
-    df.set_index("id", inplace=True)
+    df.columns = ["values", "lat", "lon"]
   
     return df
 
@@ -36,7 +35,7 @@ def extract_table_to_dataframe(con, table_name):
 def extract_excel_to_dataframe(filepath_lego, table):
 
     if table == "i":
-        filename = filepath_lego + "Power_BusInfo.xlsx"
+        filename = os.path.join(filepath_lego, "Power_BusInfo.xlsx")
         sheetname = "Power BusInfo"
         start_row = 7
         use_cols = "B"
@@ -44,7 +43,7 @@ def extract_excel_to_dataframe(filepath_lego, table):
         df.columns = ["values"]
 
     elif table == "rp":
-        filename = filepath_lego + "results.xlsx"
+        filename = os.path.join(filepath_lego, "results", "results.xlsx")
         sheetname = "TotalEnrp"
         start_row = 1
         use_cols = "A"
@@ -56,7 +55,7 @@ def extract_excel_to_dataframe(filepath_lego, table):
         df.reset_index(drop=True, inplace=True)
 
     elif table == "k":
-        filename = filepath_lego + "results.xlsx"
+        filename = os.path.join(filepath_lego, "results", "results.xlsx")
         sheetname = "TotalEnrp"
         start_row = 1
         use_cols = "B"
@@ -68,7 +67,7 @@ def extract_excel_to_dataframe(filepath_lego, table):
         df.reset_index(drop=True, inplace=True)
 
     elif table == "gi":
-        filenames = [filepath_lego + tech + ".xlsx" for tech in ["Power_VRES", "Power_ThermalGen", "Power_Storage", "Power_RoR"]]
+        filenames = [os.path.join(filepath_lego, tech + ".xlsx") for tech in ["Power_VRES", "Power_ThermalGen", "Power_Storage", "Power_RoR"]]
         sheetnames = ["Power VRES", "Power ThermalGen", "Power Storage", "Power RoR"]
         use_cols = "B,D"
         skiprows = 7
@@ -82,7 +81,7 @@ def extract_excel_to_dataframe(filepath_lego, table):
         df_g = df["g"].drop_duplicates().reset_index(drop=True)
 
     elif table == "vLineP":
-        filename = filepath_lego + "results.xlsx"
+        filename = os.path.join(filepath_lego, "results", "results.xlsx")
         sheetname = "pLineP"
 
         # Step 1: Load top 3 rows (i, j, c)
@@ -137,18 +136,18 @@ def extract_excel_to_dataframe(filepath_lego, table):
         df_lines = pd.DataFrame(unique_line_tuples_list, columns=["i", "j"])
 
     elif table =="coords":
-        filename = filepath_lego + "Power_BusInfo.xlsx"
+        filename = os.path.join(filepath_lego, "Power_BusInfo.xlsx")
         sheetname = "Power BusInfo"
         start_row = 7
         use_cols = "B,L,M"
         df = pd.read_excel(filename, sheet_name=sheetname, skiprows=start_row-1, usecols=use_cols, header=None)
-        df.columns = ["id", "lon", "lat"]
+        df.columns = ["values", "lon", "lat"]
         # set index to id
-        df.set_index("id", inplace=True)
+        df.set_index("values", inplace=True)
     
     elif table == "vGenP":
 
-        filename = filepath_lego + "results.xlsx"
+        filename = os.path.join(filepath_lego, "results", "results.xlsx")
         sheetname = "GenP"
 
         # Step 1: Load first row g
@@ -178,6 +177,9 @@ def extract_excel_to_dataframe(filepath_lego, table):
 
         # Step 4: Create final DataFrame
         df = pd.DataFrame.from_records(records)
+
+    elif table == "pDemand":
+        pass
 
     else:
         print(f"Table {table} not yet implemented or invalid.")

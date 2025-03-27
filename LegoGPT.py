@@ -7,6 +7,7 @@ import plotly.express as px
 import matplotlib.pyplot as plt
 import random
 import sqlite3
+import os
 import helper_functions as h
 
 class LegoGPT:
@@ -23,17 +24,17 @@ class LegoGPT:
         self.create_app()  # Initialize Dash app
         self.setup_layout()  # Define layout
         self.setup_callbacks()  # Define callbacks
+
         
     def load_data(self, ):
         """ Load network data from LEGO results file. """
 
-        filepath_coords = self.filepath_lego + "Power_BusInfo.xlsx"
-
+        filepath_coords = os.path.join(self.filepath_lego, "Power_BusInfo.xlsx")
         tables = ["rp", "k", "i", "g", "gi", "la", "vLineP", "vGenP","vStIntraRes", "vStInterRes", "pDemandP"]
 
         if input_type == "sqlite":
             # connect to the database
-            conn = sqlite3.connect(self.filepath_lego + "result.sqlite")
+            conn = sqlite3.connect(os.path.join(self.filepath_lego + "result.sqlite"))
             # print out all tables in the database
             # cursor = conn.cursor()
             # cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
@@ -81,10 +82,8 @@ class LegoGPT:
                         # Update the corresponding row in vLineP
                         self.vLineP.at[row_idx, "line"] = str(int(idx))  # Use row index from enumerate
                         break  # Stop searching once a match is found
-
-
-                
             self.coords = h.load_lat_lon(filepath_coords)
+
 
         elif input_type == "excel":
             for table in tables:
@@ -105,7 +104,7 @@ class LegoGPT:
             self.coords = h.extract_excel_to_dataframe(filepath_lego, "coords")
 
             # only take values where duplicate is False
-            self.vLineP = self.vLineP[self.vLineP["duplicate"] == False]
+            self.vLineP = self.vLineP[self.vLineP["duplicate"] == False].copy()
             # drop duplicate column
             self.vLineP.drop(columns=["duplicate"], inplace=True)
 
@@ -117,11 +116,16 @@ class LegoGPT:
                            
         else:
             raise ValueError("Invalid input type. Please choose either 'excel' or 'sqlite'.")
-
+        
+        
+        # add the coordinates in coords to the i dataframe
+        self.i = pd.merge(self.i, self.coords, left_on="values", right_on="values", how="left")
+        # set the index to the values column
+        self.i.set_index("values", inplace=True)
         # Compute bounds for map display
         self.bounds = [
-            [min(self.coords['lat']), min(self.coords['lon'])],
-            [max(self.coords['lat']), max(self.coords['lon'])]
+            [min(self.i['lat']), min(self.i['lon'])],
+            [max(self.i['lat']), max(self.i['lon'])]
         ]
 
         self.vLineP_max = self.vLineP["values"].max()
@@ -190,7 +194,6 @@ class LegoGPT:
             # === GLOBAL TOP CONTROLS ROW (RP dropdown + Slider on left, Axis dropdowns + Button on right) ===
             html.Div([
 
-                # Left side: Dropdown + Slider
                 html.Div([
                     html.Div([
                         dcc.Dropdown(
@@ -198,28 +201,45 @@ class LegoGPT:
                             options=[{"label": f"Period: {p}", "value": p} for p in self.rp["values"].values],
                             value=self.rp["values"][0],
                             clearable=False,
-                            style={'width': '130px', 'font-weight': 'bold', } ,
+                            style={'width': '130px', 'font-weight': 'bold'},
                         ),
                     ], style={'margin-right': '20px', 'display': display_rp}),
 
+                    # === Time Slider + Optional Number Input ===
                     html.Div([
-                        dcc.Slider(
-                            id='time-slider',
-                            min=1,
-                            max=len(self.k),
-                            step=1,
-                            # marks={k: {'label': str(k) } for k in self.k}, # fonttstyle set in css file
-                            marks=(
-                                {
-                                    1: {'label': 'k0001'},
-                                    len(self.k) // 2: {'label': f"k{len(self.k) // 2:04d}"},
-                                    len(self.k) : {'label': f"k{len(self.k) :04d}"},
-                                } if self.long_format else {k: {'label': str(k)} for k in self.k}
-                            ),
-                            tooltip={"placement": "top", "always_visible": True},
-                            value=1,
-                        ),
-                    ], style={'flex': '1'}),
+                        # Slider
+                        html.Div([
+                            dcc.Slider(
+                                id='time-slider',
+                                min=1,
+                                max=len(self.k),
+                                step=1,
+                                marks=(
+                                    {
+                                        1: {'label': 'k0001'},
+                                        len(self.k) // 2: {'label': f"k{len(self.k) // 2:04d}"},
+                                        len(self.k): {'label': f"k{len(self.k):04d}"},
+                                    } if self.long_format else {k: {'label': str(k)} for k in self.k}
+                                ),
+                                tooltip={"placement": "top", "always_visible": True},
+                                value=1,
+                            )
+                        ], style={'flex': '1'}),  # Slider fills most of the space
+
+                        # Number input (only if long format)
+                        html.Div([
+                            dcc.Input(
+                                id='time-slider-input',
+                                type='number',
+                                min=1,
+                                max=len(self.k),
+                                step=1,
+                                value=1,
+                                style={'width': '70px', 'margin-left': '10px'}
+                            )
+                        ], style={'display': display_time_range, 'flex': 'none'})  # input stays compact
+                    ], style={'flex': '1', 'display': 'flex', 'align-items': 'center', 'gap': '10px'}),
+
                 ], style={
                     'display': 'flex',
                     'align-items': 'center',
@@ -228,6 +248,7 @@ class LegoGPT:
                     'min-width': '0',
                     'max-width': '50%'
                 }),
+
 
                 # Right side: Axis Dropdowns + Button (left-aligned within their container) + RangeSlider
                 html.Div([
@@ -260,7 +281,7 @@ class LegoGPT:
                                 {'label': 'X: Line', 'value': 'line'},
 
                             ],
-                            value='time',
+                            value='generator',
                             clearable=False,
                             style={'width': '120px', 'font-weight': 'bold'},
                         ),
@@ -319,7 +340,7 @@ class LegoGPT:
             }),
 
             dcc.Store(id="last-clicked-line", data=self.la.index[0]),
-            dcc.Store(id="last-clicked-node", data=self.i["values"][0]),
+            dcc.Store(id="last-clicked-node", data=self.i.index[0]),
 
             # === MAIN SECTION: Map + Graph ===
             html.Div([
@@ -370,9 +391,9 @@ class LegoGPT:
             positions = []
             for i, j, flow in zip(vLineP_filtered["i"].values, vLineP_filtered["j"].values, vLineP_filtered["values"].values):
                 if flow < 0: # reverse the direction for the arrows
-                    positions.append([(self.coords.loc[j, 'lat'], self.coords.loc[j, 'lon']), (self.coords.loc[i, 'lat'], self.coords.loc[i, 'lon'])])
+                    positions.append([(self.i.loc[j, 'lat'], self.i.loc[j, 'lon']), (self.i.loc[i, 'lat'], self.i.loc[i, 'lon'])])
                 else:
-                    positions.append([(self.coords.loc[i, 'lat'], self.coords.loc[i, 'lon']), (self.coords.loc[j, 'lat'], self.coords.loc[j, 'lon'])])
+                    positions.append([(self.i.loc[i, 'lat'], self.i.loc[i, 'lon']), (self.i.loc[j, 'lat'], self.i.loc[j, 'lon'])])
                 
             colors = generate_colors(vLineP_filtered)
 
@@ -394,7 +415,7 @@ class LegoGPT:
                     radius=10, fillColor="#8C564B", weight=1, color="black",
                     fill=True, fillOpacity=1, id=node.Index,
                     children=dl.Popup(node.Index), n_clicks=0
-                ) for node in self.coords.itertuples(index=True)
+                ) for node in self.i.itertuples(index=True)
             ]
 
             return [dl.TileLayer(url='https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',attribution='&copy; <a href="https://carto.com/">CARTO</a>'), dl.LayerGroup(children=arrows + circles, id="network-layer" + str(random.randint(0, 1000)))] # workaround, otherwise objects with same id are not updated!
@@ -414,13 +435,29 @@ class LegoGPT:
 
         @self.app.callback(
             Output("last-clicked-node", "data"),
-            [Input(node.Index, "n_clicks") for node in self.coords.itertuples(index=True)]
+            [Input(node.Index, "n_clicks") for node in self.i.itertuples(index=True)]
         )
         def store_last_clicked_node(*args):
             if not ctx.triggered:
                 return None
             clicked_id = ctx.triggered[0]['prop_id'].split('.')[0]
             return clicked_id
+        @self.app.callback(
+            Output("time-slider", "value"),
+            Output("time-slider-input", "value"),
+            Input("time-slider", "value"),
+            Input("time-slider-input", "value"),
+        )
+        def sync_slider_and_input(slider_val, input_val):
+            ctx = dash.callback_context
+            if not ctx.triggered:
+                raise dash.exceptions.PreventUpdate
+
+            triggered_id = ctx.triggered[0]['prop_id'].split('.')[0]
+            if triggered_id == "time-slider":
+                return slider_val, slider_val
+            else:
+                return input_val, input_val
 
                 
         @self.app.callback(
@@ -442,17 +479,18 @@ class LegoGPT:
              Input("last-clicked-node", "data"),
              Input("rep-period-dropdown", "value"),
              Input("local-button", "children"),
-             Input("time-slider-range", "value")]
+             Input("time-slider-range", "value")],
+
         )
         def update_dynamic_plot(x_axis, y_axis, line_idx, node_idx, selected_period, scope, time_range):
             """ Update the single plot based on selected x-axis, y-axis, last-clicked line or node. """
 
-            print(f"Updating plot: x_axis={x_axis}, y_axis={y_axis}, selected_period={selected_period}, selected_time_range={time_range}")
+            print(f"Updating plot: x_axis={x_axis}, y_axis={y_axis}, selected_period={selected_period}, selected_time_range={time_range}, local_node={node_idx}, local_line={line_idx}, scope={scope}")
             print(f"Scope: {scope}")
 
             fig = None # Initialize figure
             y_df = None
-            k_range = [str(f"k{time:04d}") for time in range(time_range[0], time_range[1] + 1)] if self.long_format else []
+            k_range = [str(f"k{time:04d}") for time in range(time_range[0], time_range[1] + 1 )] if self.long_format else ["k0001"]
 
             if y_axis == "demand":
                 y_df = self.filter_dataframe("pDemandP", rp=selected_period, scope=scope, local_node=node_idx, k_range=k_range)
@@ -460,17 +498,21 @@ class LegoGPT:
                 y_df = self.filter_dataframe("vGenP", rp=selected_period, scope=scope, local_node=node_idx, k_range=k_range)
             elif y_axis == "power_flow":
                 y_df = self.filter_dataframe("vLineP", rp=selected_period, scope=scope, local_line=line_idx, k_range=k_range)
-
-            if y_df is not None:
+            
+            if y_df is not None and not y_df.empty:
                 if x_axis == "time":
                     x_label = "Time"
                     if y_axis == "dispatch":
+                        title = "Global dispatch over time" if scope == "Global" else f"Local dispatch for {node_idx} over time"
+                        y_df["k"] = y_df["k"].astype(str)
+                        y_df["g"] = y_df["g"].astype(str)
+                        y_df["values"] = pd.to_numeric(y_df["values"], errors="coerce")
                         fig = px.area(
                             y_df,
                             x="k",  # Use categorical 'k' for x-axis
                             y="values",
                             color="g",  # Different colors for each generator
-                            title="Global dispatch over time" if scope == "Global" else f"Local dispatch for {node_idx} over time",
+                            title=title,
                             labels={"k": x_label, "values": "Dispatch", "g": "Generator"},
                         )
                     elif y_axis == "demand":
@@ -558,6 +600,7 @@ class LegoGPT:
 if __name__ == "__main__":
 
     input_type = "excel"
-    # filepath_lego = "C:\\Users\\Kelvin Walenta\\LEGO-GPT\\examples\\"
-    filepath_lego = "C:\\Users\\Kelvin Walenta\\LEGO-GPT\\Robert\\AT+Neighbours\\"
+    # input_type = "sqlite"
+    filepath_lego = "C:\\Users\\Kelvin Walenta\\LEGO-GPT\\examples\\"
+    filepath_lego = "C:\\Users\\Kelvin Walenta\\LEGO-GPT\\Robert\\LEGO_data_TYNDP_AT_Neighbours"
     LegoGPT(input_type=input_type, filepath_lego=filepath_lego).run()
