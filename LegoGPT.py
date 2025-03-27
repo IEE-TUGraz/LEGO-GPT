@@ -436,13 +436,18 @@ class LegoGPT:
             def get_arrow_size(zoom):
                 # Adjust sensitivity if needed
                 if zoom == None:
-                    zoom =7
-                if zoom < 5:
-                    return 0
-                return max(10, int(zoom * 2))
+                    zoom =7              
+                return max(5, int(zoom * 2))
+            
+            def get_node_size(zoom):
+                # Adjust sensitivity if needed
+                if zoom == None:
+                    zoom =7              
+                return max(5, int(zoom * 1.5))
 
             print(f"Zoom level: {zoom_level}")
             arrow_size = get_arrow_size(zoom_level)
+            node_size = get_node_size(zoom_level)
 
             patterns = [[dict(offset='50%', repeat='25%', arrowHead=dict(
                 pixelSize=arrow_size,
@@ -453,7 +458,7 @@ class LegoGPT:
             circles = [
                 dl.CircleMarker(
                     center=(node.lat, node.lon),
-                    radius=10, fillColor="#8C564B", weight=1, color="black",
+                    radius=node_size, fillColor="#8C564B", weight=1, color="black",
                     fill=True, fillOpacity=1, id=node.Index,
                     children=dl.Popup(node.Index), n_clicks=0
                 ) for node in self.i.itertuples(index=True)
@@ -649,5 +654,5 @@ if __name__ == "__main__":
     input_type = "excel"
     # input_type = "sqlite"
     # filepath_lego = "C:\\Users\\Kelvin Walenta\\LEGO-GPT\\examples\\"
-    filepath_lego = "C:\\Users\\Kelvin Walenta\\LEGO-GPT\\Robert\\LEGO_data_TYNDP_AT_Neighbours"
+    filepath_lego = "C:\\Users\\Kelvin Walenta\\LEGO-GPT\\Robert\\LEGO_data_TYNDP_Europa"
     LegoGPT(input_type=input_type, filepath_lego=filepath_lego).run()
