@@ -209,7 +209,13 @@ class LegoGPT:
                             max=len(self.k),
                             step=1,
                             # marks={k: {'label': str(k) } for k in self.k}, # fonttstyle set in css file
-                            marks=None if self.long_format else {k: {'label': str(k) } for k in self.k},
+                            marks=(
+                                {
+                                    1: {'label': 'k0001'},
+                                    len(self.k) // 2: {'label': f"k{len(self.k) // 2:04d}"},
+                                    len(self.k) : {'label': f"k{len(self.k) :04d}"},
+                                } if self.long_format else {k: {'label': str(k)} for k in self.k}
+                            ),
                             tooltip={"placement": "top", "always_visible": True},
                             value=1,
                         ),
@@ -277,7 +283,13 @@ class LegoGPT:
                             min=1,
                             max=len(self.k),
                             step=1,
-                            marks=None,
+                            marks=(
+                                {
+                                    1: {'label': 'k0001'},
+                                    len(self.k) // 2: {'label': f"k{len(self.k) // 2:04d}"},
+                                    len(self.k) : {'label': f"k{len(self.k) :04d}"},
+                                } 
+                            ),
                             tooltip={"placement": "top", "always_visible": True},
                             #allowCross=False,
                             value=[1, 24],
@@ -545,7 +557,7 @@ class LegoGPT:
 
 if __name__ == "__main__":
 
-    input_type = "excel"
-    # filepath_lego = "C:\\Users\\Kelvin Walenta\\LEGO-GPT\\examples\\"
-    filepath_lego = "C:\\Users\\Kelvin Walenta\\LEGO-GPT\\Robert\\AT+Neighbours\\"
+    input_type = "sqlite"
+    filepath_lego = "C:\\Users\\Kelvin Walenta\\LEGO-GPT\\examples\\"
+    # filepath_lego = "C:\\Users\\Kelvin Walenta\\LEGO-GPT\\Robert\\AT+Neighbours\\"
     LegoGPT(input_type=input_type, filepath_lego=filepath_lego).run()
