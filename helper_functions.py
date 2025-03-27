@@ -61,7 +61,6 @@ def extract_excel_to_dataframe(filepath_lego, table):
         start_row = 1
         use_cols = "B"
         df = pd.read_excel(filename, sheet_name=sheetname, skiprows=start_row, usecols=use_cols, header=None)
-        print(df)
         df.columns = ["values"]
         # only take unique values
         df = df.drop_duplicates()

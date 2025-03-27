@@ -10,33 +10,30 @@ import sqlite3
 import helper_functions as h
 
 class LegoGPT:
-    def __init__(self, input_type: str):
+    """ Class to visualize LEGO results. """
+
+    def __init__(self, input_type: str, filepath_lego: str):
 
         # check if input_type is valid
         if input_type not in ["excel", "sqlite"]:
             raise ValueError("Invalid input type. Please choose either 'excel' or 'sqlite'.")
-        # self.long_format = False
-        self.load_data(input_type)  # Load data on initialization
-        self.modify_data()
+        self.input_type = input_type
+        self.filepath_lego = filepath_lego
+        self.load_data()  # Load data on initialization
         self.create_app()  # Initialize Dash app
         self.setup_layout()  # Define layout
         self.setup_callbacks()  # Define callbacks
         
-    def load_data(self, input_type: str):
+    def load_data(self, ):
         """ Load network data from LEGO results file. """
 
-        # filepath_lego = "C:\\Users\\Kelvin Walenta\\LEGO-Pyomo\\results\\result.sqlite"
-        # filepath_coords = "C:\\Users\\Kelvin Walenta\\LEGO-Pyomo\\data\\example\\Power_BusInfo.xlsx"
-
-        filepath_lego = "C:\\Users\\Kelvin Walenta\\LEGO-GPT\\Robert\\AT+Neighbours\\"
-        filepath_coords = filepath_lego + "Power_BusInfo.xlsx"
-
+        filepath_coords = self.filepath_lego + "Power_BusInfo.xlsx"
 
         tables = ["rp", "k", "i", "g", "gi", "la", "vLineP", "vGenP","vStIntraRes", "vStInterRes", "pDemandP"]
 
         if input_type == "sqlite":
             # connect to the database
-            conn = sqlite3.connect(filepath_lego)
+            conn = sqlite3.connect(self.filepath_lego + "result.sqlite")
             # print out all tables in the database
             # cursor = conn.cursor()
             # cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
@@ -74,7 +71,6 @@ class LegoGPT:
             self.vLineP.rename(columns={"level_2": "i"}, inplace=True)
             self.vLineP.rename(columns={"level_3": "j"}, inplace=True)
             self.vLineP.rename(columns={"level_4": "c"}, inplace=True)
-            print(self.i.values[0][0])
             # Iterate over vLineP DataFrame
             for row_idx, row in enumerate(self.vLineP.itertuples(index=True)):  # Keep index for modification
                 node_set = {row.i, row.j}  # Use set for order-independent comparison
@@ -108,8 +104,6 @@ class LegoGPT:
                     setattr(self, table, h.extract_excel_to_dataframe(filepath_lego, table))
             self.coords = h.extract_excel_to_dataframe(filepath_lego, "coords")
 
-
-            # only take rows where i and j are in this exact order
             # only take values where duplicate is False
             self.vLineP = self.vLineP[self.vLineP["duplicate"] == False]
             # drop duplicate column
@@ -120,9 +114,7 @@ class LegoGPT:
 
             # save to csv
             self.vLineP.to_csv("vLineP.csv", index=False)
-            
-                
-
+                           
         else:
             raise ValueError("Invalid input type. Please choose either 'excel' or 'sqlite'.")
 
@@ -131,37 +123,11 @@ class LegoGPT:
             [min(self.coords['lat']), min(self.coords['lon'])],
             [max(self.coords['lat']), max(self.coords['lon'])]
         ]
-    
-    def modify_data(self):
-        """ Modify data such as column names etc. """
-
 
         self.vLineP_max = self.vLineP["values"].max()
-        self.vLineP_min = self.vLineP["values"].min()
+        self.vLineP_min = self.vLineP["values"].min()   
 
-        # #########################################
-        # # change coords for nicer illustration
-        # self.coords.loc["Node_1", "lat"] = 47.282375
-        # self.coords.loc["Node_1", "lon"] = 11.515182
-        # self.coords.loc["Node_2", "lat"] = 46.619764
-        # self.coords.loc["Node_2", "lon"] = 14.264140
-        # self.coords.loc["Node_3", "lat"] = 47.058254
-        # self.coords.loc["Node_3", "lon"] = 15.459140
-        # self.coords.loc["Node_4", "lat"] = 48.165895
-        # self.coords.loc["Node_4", "lon"] = 14.026583
-        # self.coords.loc["Node_5", "lat"] = 48.235050
-        # self.coords.loc["Node_5", "lon"] = 16.421530
-        # self.coords.loc["Node_6", "lat"] = 47.390257
-        # self.coords.loc["Node_6", "lon"] = 13.684453
-        # self.coords.loc["Node_7", "lat"] = 46.689913
-        # self.coords.loc["Node_7", "lon"] = 12.797455
-        # # drop node 8 and 9 from i and coords
-        # self.coords.drop(["Node_8", "Node_9"], inplace=True)
-        # self.i.drop(self.i[self.i["values"] == "Node_8"].index, inplace=True)
-        # self.i.drop(self.i[self.i["values"] == "Node_9"].index, inplace=True)
-        # #########################################
-
-    def filter_dataframe(self, attr_str: str, rp: str, scope: str, local_node: str=None, local_line: str=None) -> pd.DataFrame:
+    def filter_dataframe(self, attr_str: str, rp: str, scope: str, local_node: str=None, local_line: str=None, k_range: list = []) -> pd.DataFrame:
         """"
         Filter the dataframe based on the values for rp and k."
         """
@@ -172,6 +138,8 @@ class LegoGPT:
                 return None
             if "rp" in df.columns:
                 df = df[df["rp"] == rp]
+            if len(k_range) > 0:
+                df = df[df["k"].isin(k_range)]
             if scope == "Local":
                 g_local = self.gi[self.gi["i"] == local_node]
                 df = df[df["g"].isin(g_local["g"])]
@@ -181,6 +149,8 @@ class LegoGPT:
                 return None
             if "rp" in df.columns:
                 df = df[df["rp"] == rp]
+            if len(k_range) > 0:
+                df = df[df["k"].isin(k_range)]            
             if scope == "Local":
                 df = df[df["i"] == local_node]
             elif scope == "Global":
@@ -191,6 +161,8 @@ class LegoGPT:
                 return None
             if "rp" in df.columns:
                 df = df[df["rp"] == rp]
+            if len(k_range) > 0:
+                df = df[df["k"].isin(k_range)]
             if scope == "Local":
                 df = df[df["line"] == local_line]
                 
@@ -206,13 +178,11 @@ class LegoGPT:
 
     def setup_layout(self):
         """ Define app layout. """
-        self.long_format = False
-        display_long = 'none'
-        # check length of rp and k
-        if len(self.rp) == 1 and len(self.k) > 24:
-            print("Only one rp and more than 24 k values. Switching to different layout.")
-            self.long_format = True
-            display_long = 'block' if self.long_format else 'none'
+
+        self.long_format = True if (len(self.rp) == 1 and len(self.k) > 24) else False
+        display_time_range = 'block' if self.long_format else 'none'
+        display_rp = 'none' if self.long_format else 'block'
+
 
 
         self.app.layout = html.Div([
@@ -228,9 +198,9 @@ class LegoGPT:
                             options=[{"label": f"Period: {p}", "value": p} for p in self.rp["values"].values],
                             value=self.rp["values"][0],
                             clearable=False,
-                            style={'width': '130px', 'font-weight': 'bold'} ,
+                            style={'width': '130px', 'font-weight': 'bold', } ,
                         ),
-                    ], style={'margin-right': '20px'}),
+                    ], style={'margin-right': '20px', 'display': display_rp}),
 
                     html.Div([
                         dcc.Slider(
@@ -253,7 +223,7 @@ class LegoGPT:
                     'max-width': '50%'
                 }),
 
-                # Right side: Axis Dropdowns + Button (left-aligned within their container)
+                # Right side: Axis Dropdowns + Button (left-aligned within their container) + RangeSlider
                 html.Div([
                     html.Div([
                         # html.Label("Y-Axis:", style={'font-weight': 'bold'}),
@@ -315,7 +285,7 @@ class LegoGPT:
                             
                         ),
 
-                    ], style={'margin-right': '10px', "flex": "1","display": display_long}),
+                    ], style={'margin-right': '10px', "flex": "1","display": display_time_range}),
 
 
 
@@ -406,8 +376,6 @@ class LegoGPT:
 
             patterns= [[dict(offset='15%', repeat='25%', arrowHead=dict(pixelSize=15, polygon=False, pathOptions=dict(stroke=True, color=color,)))] for color in colors]
             arrows = [dl.PolylineDecorator(children=polyline, patterns=pattern, n_clicks=0) for polyline, pattern in zip (polylines, patterns)]
-            print(len(arrows))
-            print(arrows)   
             circles = [
                 dl.CircleMarker(
                     center=(node.lat, node.lon),
@@ -461,24 +429,25 @@ class LegoGPT:
              Input("last-clicked-line", "data"),
              Input("last-clicked-node", "data"),
              Input("rep-period-dropdown", "value"),
-             Input("time-slider", "value"),
-             Input("local-button", "children")]
+             Input("local-button", "children"),
+             Input("time-slider-range", "value")]
         )
-        def update_dynamic_plot(x_axis, y_axis, line_idx, node_idx, selected_period, selected_time, scope):
+        def update_dynamic_plot(x_axis, y_axis, line_idx, node_idx, selected_period, scope, time_range):
             """ Update the single plot based on selected x-axis, y-axis, last-clicked line or node. """
 
-            print(f"Updating plot: x_axis={x_axis}, y_axis={y_axis}, selected_period={selected_period}, selected_time={selected_time}")
+            print(f"Updating plot: x_axis={x_axis}, y_axis={y_axis}, selected_period={selected_period}, selected_time_range={time_range}")
             print(f"Scope: {scope}")
 
             fig = None # Initialize figure
             y_df = None
+            k_range = [str(f"k{time:04d}") for time in range(time_range[0], time_range[1] + 1)] if self.long_format else []
 
             if y_axis == "demand":
-                y_df = self.filter_dataframe("pDemandP", rp=selected_period, scope=scope, local_node=node_idx)
+                y_df = self.filter_dataframe("pDemandP", rp=selected_period, scope=scope, local_node=node_idx, k_range=k_range)
             elif y_axis == "dispatch":
-                y_df = self.filter_dataframe("vGenP", rp=selected_period, scope=scope, local_node=node_idx)
+                y_df = self.filter_dataframe("vGenP", rp=selected_period, scope=scope, local_node=node_idx, k_range=k_range)
             elif y_axis == "power_flow":
-                y_df = self.filter_dataframe("vLineP", rp=selected_period, scope=scope, local_line=line_idx)
+                y_df = self.filter_dataframe("vLineP", rp=selected_period, scope=scope, local_line=line_idx, k_range=k_range)
 
             if y_df is not None:
                 if x_axis == "time":
@@ -572,8 +541,11 @@ class LegoGPT:
 
     def run(self):
         """ Start the Dash server. """
-        self.app.run(debug=True)
+        self.app.run(debug=False)
 
 if __name__ == "__main__":
+
     input_type = "excel"
-    LegoGPT(input_type).run()
+    # filepath_lego = "C:\\Users\\Kelvin Walenta\\LEGO-GPT\\examples\\"
+    filepath_lego = "C:\\Users\\Kelvin Walenta\\LEGO-GPT\\Robert\\AT+Neighbours\\"
+    LegoGPT(input_type=input_type, filepath_lego=filepath_lego).run()
