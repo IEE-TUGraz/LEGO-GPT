@@ -465,7 +465,7 @@ class LegoGPT:
                 if x_axis == "time":
                     x_label = "Time"
                     if y_axis == "dispatch":
-                        fig = px.line(
+                        fig = px.area(
                             y_df,
                             x="k",  # Use categorical 'k' for x-axis
                             y="values",
@@ -557,7 +557,7 @@ class LegoGPT:
 
 if __name__ == "__main__":
 
-    input_type = "sqlite"
-    filepath_lego = "C:\\Users\\Kelvin Walenta\\LEGO-GPT\\examples\\"
-    # filepath_lego = "C:\\Users\\Kelvin Walenta\\LEGO-GPT\\Robert\\AT+Neighbours\\"
+    input_type = "excel"
+    # filepath_lego = "C:\\Users\\Kelvin Walenta\\LEGO-GPT\\examples\\"
+    filepath_lego = "C:\\Users\\Kelvin Walenta\\LEGO-GPT\\Robert\\AT+Neighbours\\"
     LegoGPT(input_type=input_type, filepath_lego=filepath_lego).run()
