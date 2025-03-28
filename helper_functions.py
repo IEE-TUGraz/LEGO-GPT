@@ -1,6 +1,7 @@
 import pandas as pd
 import os
 import yaml
+import time
 
 def load_lat_lon(input_dir: str):
     sheetname = "Power BusInfo"
@@ -83,22 +84,32 @@ def extract_excel_to_dataframe(input_dir, table):
         df_g = df["g"].drop_duplicates().reset_index(drop=True)
 
     elif table == "vLineP":
+
+        start = time.time()
         filename = os.path.join(input_dir, "results", "results.xlsx")
         sheetname = "pLineP"
 
-        # Step 1: Load top 3 rows (i, j, c)
+        # Step 1: Load header rows
         header_df = pd.read_excel(filename, sheet_name=sheetname, header=None, nrows=3)
         i_list = header_df.iloc[0, 2:].tolist()
         j_list = header_df.iloc[1, 2:].tolist()
         c_list = header_df.iloc[2, 2:].tolist()
-        unique_line_tuples_set = []
-        unique_line_tuples_list = []
 
-        # Step 2: Load the rest of the data (rp, k, and values)
+        # Step 2: Load the rest of the data
         data_df = pd.read_excel(filename, sheet_name=sheetname, header=None, skiprows=3)
 
-        # Step 3: Prepare final rows
+        # Step 3: Preprocess unique line tuples with direction
+        line_index_dict = {}  # frozenset(i,j) -> line index
+        line_list = []        # list of [i, j] in order
         records = []
+
+        for idx, (i, j) in enumerate(zip(i_list, j_list)):
+            ij_key = frozenset([i, j])
+            if ij_key not in line_index_dict:
+                line_index_dict[ij_key] = len(line_index_dict)
+                line_list.append([i, j])
+
+        # Step 4: Main loop (fast, flat)
         for row in data_df.itertuples(index=False):
             rp = row[0]
             k = row[1]
@@ -107,21 +118,11 @@ def extract_excel_to_dataframe(input_dir, table):
             for idx, value in enumerate(values):
                 i = i_list[idx]
                 j = j_list[idx]
-                ij_tuple = set([i, j])
-
-                if ij_tuple in unique_line_tuples_set:
-                    line = unique_line_tuples_set.index(ij_tuple)
-                    # chack if the order of i and j is correct
-                    if unique_line_tuples_list[line] != [i,j]:
-                        duplicate = True
-                    else: 
-                        duplicate = False
-                else:
-                    unique_line_tuples_set.append(ij_tuple)
-                    unique_line_tuples_list.append([i,j])
-                    line = len(unique_line_tuples_set) - 1
-                    duplicate = False
                 c = c_list[idx]
+                ij_key = frozenset([i, j])
+                line = line_index_dict[ij_key]
+                is_duplicate = [i, j] != line_list[line]
+
                 records.append({
                     'rp': rp,
                     'k': k,
@@ -129,13 +130,16 @@ def extract_excel_to_dataframe(input_dir, table):
                     'j': j,
                     'c': c,
                     'values': value,
-                    'line': str(int(line)),
-                    'duplicate': duplicate
+                    'line': str(line),
+                    'duplicate': is_duplicate
                 })
 
-        # Step 4: Create final DataFrame
+        # Final outputs
         df = pd.DataFrame.from_records(records)
-        df_lines = pd.DataFrame(unique_line_tuples_list, columns=["i", "j"])
+        df_lines = pd.DataFrame(line_list, columns=['i', 'j'])
+
+        end = time.time()
+        print(f"Time taken to process vLineP: {end - start:.2f} seconds")
 
     elif table =="coords":
         filename = os.path.join(input_dir, "Power_BusInfo.xlsx")
@@ -149,36 +153,42 @@ def extract_excel_to_dataframe(input_dir, table):
     
     elif table == "vGenP":
 
+        start = time.time()
         filename = os.path.join(input_dir, "results", "results.xlsx")
         sheetname = "GenP"
 
-        # Step 1: Load first row g
-        header_df = pd.read_excel(filename, sheet_name=sheetname, header=None, nrows=1)
-        g_list = header_df.iloc[0, 1:].tolist()
+        # Step 1: Load data once
+        raw_df = pd.read_excel(filename, sheet_name=sheetname, header=None)
 
-        # Step 2: Load the rest of the data (h and values)
-        data_df = pd.read_excel(filename, sheet_name=sheetname, header=None, skiprows=1)
+        # Step 2: Extract header and data
+        g_list = raw_df.iloc[0, 1:].tolist()  # generators
+        data_df = raw_df.iloc[1:, :]          # rest of the rows
+        
 
-        # Step 3: Prepare final rows
-        records = []
-        for row in data_df.itertuples(index=False):
-            rp = "rp01" # NOTE: this must change when we have multiple rps
-            h = row[0]
-            # replace hxxxx with kxxxx
-            k = "k" + h[1:]
-            values = row[1:]
+        # Step 3: Rename columns
+        data_df.columns = ['h'] + g_list
+        data_df = data_df.copy()  # ← ensures it's a real copy, not a slice view
+        # Step 4: Create 'k' column from 'h'
+        data_df['k'] = data_df['h'].apply(lambda h: 'k' + h[1:] if isinstance(h, str) and h.startswith('h') else h)
+        data_df['rp'] = 'rp01'  # Hardcoded for now
 
-            for idx, value in enumerate(values):
-                g = g_list[idx]
-                records.append({
-                    'rp': rp,
-                    'k': k,
-                    'g': g,
-                    'values': value,
-                })
 
-        # Step 4: Create final DataFrame
-        df = pd.DataFrame.from_records(records)
+
+        # Step 5: Melt the data into long format
+        df = pd.melt(
+            data_df,
+            id_vars=['rp', 'k'],
+            value_vars=g_list,
+            var_name='g',
+            value_name='values'
+        )
+
+
+        # Optional: reorder columns
+        df = df[['rp', 'k', 'g', 'values']]
+
+        end = time.time()
+        print(f"Time taken to process vGenP: {end - start:.2f} seconds")
 
     elif table == "pPmax":
         filename = os.path.join(input_dir, "Power_Network.xlsx")
