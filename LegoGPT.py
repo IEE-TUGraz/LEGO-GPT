@@ -13,13 +13,13 @@ import helper_functions as h
 class LegoGPT:
     """ Class to visualize LEGO results. """
 
-    def __init__(self, input_type: str, filepath_lego: str):
+    def __init__(self, input_type: str, input_dir: str):
 
         # check if input_type is valid
         if input_type not in ["excel", "sqlite"]:
             raise ValueError("Invalid input type. Please choose either 'excel' or 'sqlite'.")
         self.input_type = input_type
-        self.filepath_lego = filepath_lego
+        self.input_dir = input_dir
         self.load_data()  # Load data on initialization
         self.create_app()  # Initialize Dash app
         self.setup_layout()  # Define layout
@@ -28,12 +28,12 @@ class LegoGPT:
     def load_data(self, ):
         """ Load network data from LEGO results file. """
 
-        filepath_coords = os.path.join(self.filepath_lego, "Power_BusInfo.xlsx")
+        filepath_coords = os.path.join(self.input_dir, "Power_BusInfo.xlsx")
         tables = ["rp", "k", "i", "g", "gi", "la", "vLineP", "vGenP","vStIntraRes", "vStInterRes", "pDemandP", "pPmax"]
 
         if input_type == "sqlite":
             # connect to the database
-            conn = sqlite3.connect(os.path.join(self.filepath_lego + "result.sqlite"))
+            conn = sqlite3.connect(os.path.join(self.input_dir + "result.sqlite"))
             # print out all tables in the database
             cursor = conn.cursor()
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
@@ -92,19 +92,19 @@ class LegoGPT:
             for table in tables:
                 print(f"Loading table {table}...")
                 if table == "vLineP":
-                    df, df_lines = h.extract_excel_to_dataframe(filepath_lego, table)
+                    df, df_lines = h.extract_excel_to_dataframe(input_dir, table)
                     self.vLineP = df
                     self.la = df_lines
                 elif table == "gi":
-                    df, df_g = h.extract_excel_to_dataframe(filepath_lego, table)
+                    df, df_g = h.extract_excel_to_dataframe(input_dir, table)
                     self.gi = df
                     self.g = df_g
                 elif table == "la" or table == "g": # get from other dataframe
                     continue
                 else:
                     # load the data as variable with the table name
-                    setattr(self, table, h.extract_excel_to_dataframe(filepath_lego, table))
-            self.coords = h.extract_excel_to_dataframe(filepath_lego, "coords")
+                    setattr(self, table, h.extract_excel_to_dataframe(input_dir, table))
+            self.coords = h.extract_excel_to_dataframe(input_dir, "coords")
 
             # only take values where duplicate is False
             self.vLineP = self.vLineP[self.vLineP["duplicate"] == False].copy()
@@ -651,8 +651,7 @@ class LegoGPT:
 
 if __name__ == "__main__":
 
-    input_type = "excel"
-    # input_type = "sqlite"
-    # filepath_lego = "C:\\Users\\Kelvin Walenta\\LEGO-GPT\\examples\\"
-    filepath_lego = "C:\\Users\\Kelvin Walenta\\LEGO-GPT\\Robert\\LEGO_data_TYNDP_Europa"
-    LegoGPT(input_type=input_type, filepath_lego=filepath_lego).run()
+    config = h.load_config()
+    input_type = config["input_type"]
+    input_dir = config["input_dir"]
+    LegoGPT(input_type=input_type, input_dir=input_dir).run()

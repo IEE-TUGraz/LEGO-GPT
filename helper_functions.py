@@ -1,10 +1,12 @@
 import pandas as pd
 import os
-def load_lat_lon(filepath: str):
-    sheetname = "Power BusInfo"
+import yaml
 
+def load_lat_lon(input_dir: str):
+    sheetname = "Power BusInfo"
+    filename = os.path.join(input_dir, "Power_BusInfo.xlsx")
     start_row = 7
-    df = pd.read_excel(filepath, sheet_name=sheetname, skiprows=start_row-1, header=None)
+    df = pd.read_excel(filename, sheet_name=sheetname, skiprows=start_row-1, header=None)
     df = df[[1, 12, 13]]
     df.columns = ["values", "lat", "lon"]
   
@@ -32,10 +34,10 @@ def extract_table_to_dataframe(con, table_name):
         print(f"Error extracting table {table_name}: {e}")
         return None
 
-def extract_excel_to_dataframe(filepath_lego, table):
+def extract_excel_to_dataframe(input_dir, table):
 
     if table == "i":
-        filename = os.path.join(filepath_lego, "Power_BusInfo.xlsx")
+        filename = os.path.join(input_dir, "Power_BusInfo.xlsx")
         sheetname = "Power BusInfo"
         start_row = 7
         use_cols = "B"
@@ -43,7 +45,7 @@ def extract_excel_to_dataframe(filepath_lego, table):
         df.columns = ["values"]
 
     elif table == "rp":
-        filename = os.path.join(filepath_lego, "results", "results.xlsx")
+        filename = os.path.join(input_dir, "results", "results.xlsx")
         sheetname = "TotalEnrp"
         start_row = 1
         use_cols = "A"
@@ -55,7 +57,7 @@ def extract_excel_to_dataframe(filepath_lego, table):
         df.reset_index(drop=True, inplace=True)
 
     elif table == "k":
-        filename = os.path.join(filepath_lego, "results", "results.xlsx")
+        filename = os.path.join(input_dir, "results", "results.xlsx")
         sheetname = "TotalEnrp"
         start_row = 1
         use_cols = "B"
@@ -67,7 +69,7 @@ def extract_excel_to_dataframe(filepath_lego, table):
         df.reset_index(drop=True, inplace=True)
 
     elif table == "gi":
-        filenames = [os.path.join(filepath_lego, tech + ".xlsx") for tech in ["Power_VRES", "Power_ThermalGen", "Power_Storage", "Power_RoR"]]
+        filenames = [os.path.join(input_dir, tech + ".xlsx") for tech in ["Power_VRES", "Power_ThermalGen", "Power_Storage", "Power_RoR"]]
         sheetnames = ["Power VRES", "Power ThermalGen", "Power Storage", "Power RoR"]
         use_cols = "B,D"
         skiprows = 7
@@ -81,7 +83,7 @@ def extract_excel_to_dataframe(filepath_lego, table):
         df_g = df["g"].drop_duplicates().reset_index(drop=True)
 
     elif table == "vLineP":
-        filename = os.path.join(filepath_lego, "results", "results.xlsx")
+        filename = os.path.join(input_dir, "results", "results.xlsx")
         sheetname = "pLineP"
 
         # Step 1: Load top 3 rows (i, j, c)
@@ -136,7 +138,7 @@ def extract_excel_to_dataframe(filepath_lego, table):
         df_lines = pd.DataFrame(unique_line_tuples_list, columns=["i", "j"])
 
     elif table =="coords":
-        filename = os.path.join(filepath_lego, "Power_BusInfo.xlsx")
+        filename = os.path.join(input_dir, "Power_BusInfo.xlsx")
         sheetname = "Power BusInfo"
         start_row = 7
         use_cols = "B,L,M"
@@ -147,7 +149,7 @@ def extract_excel_to_dataframe(filepath_lego, table):
     
     elif table == "vGenP":
 
-        filename = os.path.join(filepath_lego, "results", "results.xlsx")
+        filename = os.path.join(input_dir, "results", "results.xlsx")
         sheetname = "GenP"
 
         # Step 1: Load first row g
@@ -179,7 +181,7 @@ def extract_excel_to_dataframe(filepath_lego, table):
         df = pd.DataFrame.from_records(records)
 
     elif table == "pPmax":
-        filename = os.path.join(filepath_lego, "Power_Network.xlsx")
+        filename = os.path.join(input_dir, "Power_Network.xlsx")
         sheetname = "Power Network"
 
         start_row = 7
@@ -202,5 +204,7 @@ def extract_excel_to_dataframe(filepath_lego, table):
         return df 
 
 
-# df = extract_excel_to_dataframe(filepath_lego, table) # Expected output: DataFrame with one column named "values" containing the values from the "Power_BusInfo.xlsx" file.
-# print(df.head()) # Expected output: First 5 rows of the DataFrame.
+def load_config(config_path="config.yml"):
+    with open(config_path, 'r') as f:
+        config = yaml.safe_load(f)
+    return config
