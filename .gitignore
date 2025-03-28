@@ -39,7 +39,7 @@ __pycache__/
 
 examples/
 Robert/
-vLineP.csv
 
-hover.py
 testing.py
+
+config.yml
