@@ -13,13 +13,31 @@ import helper_functions as h
 class LegoGPT:
     """ Class to visualize LEGO results. """
 
-    def __init__(self, input_type: str, input_dir: str):
+    def __init__(self, ):
 
-        # check if input_type is valid
-        if input_type not in ["excel", "sqlite"]:
+        source_config = h.load_config("config.yml")
+        self.input_dir = source_config["input_dir"]
+        self.input_type = source_config["input_type"]
+        if self.input_type not in ["excel", "sqlite"]:
             raise ValueError("Invalid input type. Please choose either 'excel' or 'sqlite'.")
-        self.input_type = input_type
-        self.input_dir = input_dir
+
+        settings = h.load_config('settings.yml')
+        self.tables = settings["tables"]
+        self.dropdown_options_y = settings["dropdown_options_y"]
+        self.dropdown_options_x = settings["dropdown_options_x"]
+
+        # check if i, la, vLineP, k and pPmax are in the tables
+        if "i" not in self.tables:
+            raise ValueError("i table is missing in the input data.")
+        if "la" not in self.tables:
+            raise ValueError("la table is missing in the input data.")
+        if "vLineP" not in self.tables:
+            raise ValueError("vLineP table is missing in the input data.")
+        if "pPmax" not in self.tables:
+            raise ValueError("pPmax table is missing in the input data.")
+        if "k" not in self.tables:
+            raise ValueError("k table is missing in the input data.")
+
         self.load_data()  # Load data on initialization
         self.create_app()  # Initialize Dash app
         self.setup_layout()  # Define layout
@@ -28,83 +46,82 @@ class LegoGPT:
     def load_data(self, ):
         """ Load network data from LEGO results file. """
 
-        filepath_coords = os.path.join(self.input_dir, "Power_BusInfo.xlsx")
-        tables = ["rp", "k", "i", "g", "gi", "la", "vLineP", "vGenP","vStIntraRes", "vStInterRes", "pDemandP", "pPmax"]
 
-        if input_type == "sqlite":
+        if self.input_type == "sqlite":
             # connect to the database
-            conn = sqlite3.connect(os.path.join(self.input_dir + "result.sqlite"))
+            conn = sqlite3.connect(os.path.join(self.input_dir, "result.sqlite"))
             # print out all tables in the database
             cursor = conn.cursor()
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
-            print(cursor.fetchall())
+            # print(cursor.fetchall())
 
 
-            for table in tables:
+            for table in self.tables:
                 # load the data as variable with the table name
                 setattr(self, table, h.extract_table_to_dataframe(conn, table))
             
-            # region remove unnecessary index column in sets
-            self.rp.drop(columns=["index"], inplace=True)
-            self.rp.rename(columns={"0": "values"}, inplace=True)
+            if "rp" in self.tables:
+                # region remove unnecessary index column in sets
+                self.rp.drop(columns=["index"], inplace=True)
+                self.rp.rename(columns={"0": "values"}, inplace=True)
+            if "k" in self.tables:
+                self.k.drop(columns=["index"], inplace=True)
+                self.k.rename(columns={"0": "values"}, inplace=True)
+            if "i" in self.tables:
+                self.i.drop(columns=["index"], inplace=True)    
+                self.i.rename(columns={"0": "values"}, inplace=True)
+            if "g" in self.tables:
+                self.g.drop(columns=["index"], inplace=True)
+                self.g.rename(columns={"0": "values"}, inplace=True)
+            if "gi" in self.tables:
+                self.gi.rename(columns={"0": "g"}, inplace=True)
+                self.gi.rename(columns={"1": "i"}, inplace=True)
+                self.gi.drop(columns=["index"], inplace=True)
+            if "la" in self.tables:
+                self.la.drop(columns=["index"], inplace=True)
+                self.la.rename(columns={"0": "i"}, inplace=True)
+                self.la.rename(columns={"1": "j"}, inplace=True)
+                self.la.rename(columns={"2": "c"}, inplace=True)
+            if "pPmax" in self.tables:
+                self.pPmax.rename(columns={"level_0": "i"}, inplace=True)
+                self.pPmax.rename(columns={"level_1": "j"}, inplace=True)
+                self.pPmax.rename(columns={"level_2": "c"}, inplace=True)
+            if "vLineP" in self.tables:
+                self.vLineP.rename(columns={"level_0": "rp"}, inplace=True)
+                self.vLineP.rename(columns={"level_1": "k"}, inplace=True)
+                self.vLineP.rename(columns={"level_2": "i"}, inplace=True)
+                self.vLineP.rename(columns={"level_3": "j"}, inplace=True)
+                self.vLineP.rename(columns={"level_4": "c"}, inplace=True)
+                # Iterate over vLineP DataFrame
+                for row_idx, row in enumerate(self.vLineP.itertuples(index=True)):  # Keep index for modification
+                    node_set = {row.i, row.j}  # Use set for order-independent comparison
 
-            self.k.drop(columns=["index"], inplace=True)
-            self.k.rename(columns={"0": "values"}, inplace=True)
-
-            self.i.drop(columns=["index"], inplace=True)    
-            self.i.rename(columns={"0": "values"}, inplace=True)
-
-            self.g.drop(columns=["index"], inplace=True)
-            self.g.rename(columns={"0": "values"}, inplace=True)
-
-            self.gi.rename(columns={"0": "g"}, inplace=True)
-            self.gi.rename(columns={"1": "i"}, inplace=True)
-            self.gi.drop(columns=["index"], inplace=True)
-
-            self.la.drop(columns=["index"], inplace=True)
-            self.la.rename(columns={"0": "i"}, inplace=True)
-            self.la.rename(columns={"1": "j"}, inplace=True)
-            self.la.rename(columns={"2": "c"}, inplace=True)
-
-            self.pPmax.rename(columns={"level_0": "i"}, inplace=True)
-            self.pPmax.rename(columns={"level_1": "j"}, inplace=True)
-            self.pPmax.rename(columns={"level_2": "c"}, inplace=True)
-
-            self.vLineP.rename(columns={"level_0": "rp"}, inplace=True)
-            self.vLineP.rename(columns={"level_1": "k"}, inplace=True)
-            self.vLineP.rename(columns={"level_2": "i"}, inplace=True)
-            self.vLineP.rename(columns={"level_3": "j"}, inplace=True)
-            self.vLineP.rename(columns={"level_4": "c"}, inplace=True)
-            # Iterate over vLineP DataFrame
-            for row_idx, row in enumerate(self.vLineP.itertuples(index=True)):  # Keep index for modification
-                node_set = {row.i, row.j}  # Use set for order-independent comparison
-
-                # Iterate over self.la DataFrame to find the matching line
-                for idx, line in enumerate(self.la.itertuples(index=False)):
-                    if {line.i, line.j} == node_set:
-                        # Update the corresponding row in vLineP
-                        self.vLineP.at[row_idx, "line"] = str(int(idx))  # Use row index from enumerate
-                        break  # Stop searching once a match is found
-            self.coords = h.load_lat_lon(filepath_coords)
+                    # Iterate over self.la DataFrame to find the matching line
+                    for idx, line in enumerate(self.la.itertuples(index=False)):
+                        if {line.i, line.j} == node_set:
+                            # Update the corresponding row in vLineP
+                            self.vLineP.at[row_idx, "line"] = str(int(idx))  # Use row index from enumerate
+                            break  # Stop searching once a match is found
+            self.coords = h.load_lat_lon(self.input_dir)
             
 
-        elif input_type == "excel":
-            for table in tables:
+        elif self.input_type == "excel":
+            for table in self.tables:
                 print(f"Loading table {table}...")
                 if table == "vLineP":
-                    df, df_lines = h.extract_excel_to_dataframe(input_dir, table)
+                    df, df_lines = h.extract_excel_to_dataframe(self.input_dir, table)
                     self.vLineP = df
                     self.la = df_lines
                 elif table == "gi":
-                    df, df_g = h.extract_excel_to_dataframe(input_dir, table)
+                    df, df_g = h.extract_excel_to_dataframe(self.input_dir, table)
                     self.gi = df
                     self.g = df_g
                 elif table == "la" or table == "g": # get from other dataframe
                     continue
                 else:
                     # load the data as variable with the table name
-                    setattr(self, table, h.extract_excel_to_dataframe(input_dir, table))
-            self.coords = h.extract_excel_to_dataframe(input_dir, "coords")
+                    setattr(self, table, h.extract_excel_to_dataframe(self.input_dir, table))
+            self.coords = h.extract_excel_to_dataframe(self.input_dir, "coords")
 
             # only take values where duplicate is False
             self.vLineP = self.vLineP[self.vLineP["duplicate"] == False].copy()
@@ -118,22 +135,23 @@ class LegoGPT:
         else:
             raise ValueError("Invalid input type. Please choose either 'excel' or 'sqlite'.")
         
-        
-        # add the coordinates in coords to the i dataframe
-        self.i = pd.merge(self.i, self.coords, left_on="values", right_on="values", how="left")
-        # set the index to the values column
-        self.i.set_index("values", inplace=True)
+        if "i" in self.tables:
+            # add the coordinates in coords to the i dataframe
+            self.i = pd.merge(self.i, self.coords, left_on="values", right_on="values", how="left")
+            # set the index to the values column
+            self.i.set_index("values", inplace=True)
 
-        # iterate over pPmax and add the line number to the dataframe
-        for row_idx, row in enumerate(self.pPmax.itertuples(index=True)):  # Keep index for modification
-            node_set = {row.i, row.j}  # Use set for order-independent comparison
+        if "pPmax" in self.tables:
+            # iterate over pPmax and add the line number to the dataframe
+            for row_idx, row in enumerate(self.pPmax.itertuples(index=True)):  # Keep index for modification
+                node_set = {row.i, row.j}  # Use set for order-independent comparison
 
-            # Iterate over self.la DataFrame to find the matching line
-            for idx, line in enumerate(self.la.itertuples(index=False)):
-                if {line.i, line.j} == node_set:
-                    # Update the corresponding row in vLineP
-                    self.pPmax.at[row_idx, "line"] = str(int(idx))
-                    break  # Stop searching once a match is found
+                # Iterate over self.la DataFrame to find the matching line
+                for idx, line in enumerate(self.la.itertuples(index=False)):
+                    if {line.i, line.j} == node_set:
+                        # Update the corresponding row in vLineP
+                        self.pPmax.at[row_idx, "line"] = str(int(idx))
+                        break  # Stop searching once a match is found
 
         # Compute bounds for map display
         self.bounds = [
@@ -141,15 +159,16 @@ class LegoGPT:
             [max(self.i['lat']), max(self.i['lon'])]
         ]
 
-        # add to every line in vLineP the value divided by pPmax
-        self.vLineP["rel_values"] = abs(self.vLineP["values"]) / self.vLineP["line"].map(
-            self.pPmax.set_index("line")["values"]
-        )
-        self.vLineP["pPmax"] = self.vLineP["line"].map(
-            self.pPmax.set_index("line")["values"]
-        )
-        self.vLineP_max = self.vLineP["values"].max()
-        self.vLineP_min = self.vLineP["values"].min()   
+        if "vLineP" in self.tables:
+            # add to every line in vLineP the value divided by pPmax
+            self.vLineP["rel_values"] = abs(self.vLineP["values"]) / self.vLineP["line"].map(
+                self.pPmax.set_index("line")["values"]
+            )
+            self.vLineP["pPmax"] = self.vLineP["line"].map(
+                self.pPmax.set_index("line")["values"]
+            )
+            self.vLineP_max = self.vLineP["values"].max()
+            self.vLineP_min = self.vLineP["values"].min()   
 
     def filter_dataframe(self, attr_str: str, rp: str, scope: str, local_node: str=None, local_line: str=None, k_range: list = []) -> pd.DataFrame:
         """"
@@ -203,11 +222,9 @@ class LegoGPT:
     def setup_layout(self):
         """ Define app layout. """
 
-        self.long_format = True if (len(self.rp) == 1 and len(self.k) > 24) else False
+        self.long_format = True if (len(self.rp) == 1 and len(self.k) > 24) or "rp" not in self.tables else False
         display_time_range = 'block' if self.long_format else 'none'
         display_rp = 'none' if self.long_format else 'block'
-
-
 
         self.app.layout = html.Div([
 
@@ -276,15 +293,8 @@ class LegoGPT:
                         # html.Label("Y-Axis:", style={'font-weight': 'bold'}),
                         dcc.Dropdown(
                             id="y-axis-dropdown",
-                            options=[
-                                {'label': 'Y: Power Flow', 'value': 'power_flow'},
-                                {'label': 'Y: Dispatch', 'value': 'dispatch'},
-                                {'label': 'Y: Demand', 'value': 'demand'},
-                                {'label': 'Y: Storage Intra', 'value': 'storage_intra'},
-
-
-                            ],
-                            value='dispatch',
+                            options=self.dropdown_options_y,
+                            value=self.dropdown_options_y[0]['value'],
                             clearable=False,
                             style={'width': '120px', 'font-weight': 'bold'},
                         ),
@@ -294,14 +304,8 @@ class LegoGPT:
                         # html.Label("X-Axis:", style={'font-weight': 'bold'}),
                         dcc.Dropdown(
                             id="x-axis-dropdown",
-                            options=[
-                                {'label': 'X: Time', 'value': 'time'},
-                                {'label': 'X: Generator', 'value': 'generator'},
-                                {'label': 'X: Storage', 'value': 'storage'},
-                                {'label': 'X: Line', 'value': 'line'},
-
-                            ],
-                            value='generator',
+                            options=self.dropdown_options_x,
+                            value=self.dropdown_options_x[0]['value'],
                             clearable=False,
                             style={'width': '120px', 'font-weight': 'bold'},
                         ),
@@ -543,7 +547,7 @@ class LegoGPT:
 
             fig = None # Initialize figure
             y_df = None
-            k_range = [str(f"k{time:04d}") for time in range(time_range[0], time_range[1] + 1 )] if self.long_format else ["k0001"]
+            k_range = [str(f"k{time:04d}") for time in range(time_range[0], time_range[1] + 1 )] if self.long_format else self.k["values"].values.tolist()
 
             if y_axis == "demand":
                 y_df = self.filter_dataframe("pDemandP", rp=selected_period, scope=scope, local_node=node_idx, k_range=k_range)
@@ -652,12 +656,8 @@ class LegoGPT:
         self.app.run(debug=False)
 
 if __name__ == "__main__":
-
     # check if there exists a config file in the current directory, if not copy it from the default config file
-    if not os.path.exists("config.yaml"):
-        h.copy_default_config()
-        
-    config = h.load_config()
-    input_type = config["input_type"]
-    input_dir = config["input_dir"]
-    LegoGPT(input_type=input_type, input_dir=input_dir).run()
+    if not os.path.exists("config.yml"):
+        h.copy_default_config()    
+    else:
+        LegoGPT().run()

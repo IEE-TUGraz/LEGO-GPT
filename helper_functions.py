@@ -229,7 +229,7 @@ def copy_default_config(config_path="config.yml", default_config_path="config_te
             config = f.read()
         with open(config_path, 'w') as f:
             f.write(config)
-        print(f"Copied default configuration to {config_path}. Enter path settings in the file.")
+        print(f"Copied default configuration to {config_path}. Enter path settings in the file, then rerun.")
         
     else:
         print(f"Configuration file already exists at {config_path}.")
