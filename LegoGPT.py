@@ -423,7 +423,7 @@ class LegoGPT:
             polylines = [
                 dl.Polyline(
                     positions=position,
-                    color=color, weight=5, id=str(int(line)),
+                    color=color, weight=2, id=str(int(line)),
                     children=[
                         dl.Popup(f"Power Flow: {abs(vLineP_filtered.iloc[idx]['values']):.2f} MW, Line rating: {vLineP_filtered.iloc[idx]['pPmax']:.2f} MW"),
                     ],
@@ -437,13 +437,13 @@ class LegoGPT:
                 # Adjust sensitivity if needed
                 if zoom == None:
                     zoom =7              
-                return max(5, int(zoom * 2))
+                return max(0.5, int(zoom * 1.2))
             
             def get_node_size(zoom):
                 # Adjust sensitivity if needed
                 if zoom == None:
                     zoom =7              
-                return max(5, int(zoom * 1.5))
+                return max(1.5, int(zoom * 0.9))
 
             print(f"Zoom level: {zoom_level}")
             arrow_size = get_arrow_size(zoom_level)
