@@ -651,6 +651,10 @@ class LegoGPT:
 
 if __name__ == "__main__":
 
+    # check if there exists a config file in the current directory, if not copy it from the default config file
+    if not os.path.exists("config.yaml"):
+        h.copy_default_config()
+        
     config = h.load_config()
     input_type = config["input_type"]
     input_dir = config["input_dir"]

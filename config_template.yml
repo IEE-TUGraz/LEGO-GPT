@@ -1,0 +1,2 @@
+input_type: excel # excel or sqlite
+input_dir: "path_to_directory" # directory with the input

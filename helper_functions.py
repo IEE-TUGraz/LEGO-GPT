@@ -213,6 +213,26 @@ def extract_excel_to_dataframe(input_dir, table):
     else:
         return df 
 
+def copy_default_config(config_path="config.yml", default_config_path="config_template.yml"):
+    """
+    Copies the default configuration file to the specified path.
+
+    Parameters:
+        config_path (str): Path where the configuration file will be copied.
+        default_config_path (str): Path of the default configuration file.
+
+    Returns:
+        None
+    """
+    if not os.path.exists(config_path):
+        with open(default_config_path, 'r') as f:
+            config = f.read()
+        with open(config_path, 'w') as f:
+            f.write(config)
+        print(f"Copied default configuration to {config_path}. Enter path settings in the file.")
+        
+    else:
+        print(f"Configuration file already exists at {config_path}.")
 
 def load_config(config_path="config.yml"):
     with open(config_path, 'r') as f:
