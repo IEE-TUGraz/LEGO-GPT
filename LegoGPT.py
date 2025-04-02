@@ -13,18 +13,18 @@ import helper_functions as h
 class LegoGPT:
     """ Class to visualize LEGO results. """
 
-    def __init__(self, ):
+    def __init__(self, config_path: str = None):
+        """ Initialize the class. """
 
-        source_config = h.load_config("config.yml")
-        self.input_dir = source_config["input_dir"]
-        self.input_type = source_config["input_type"]
+        # Load configuration from this directory or from the provided path
+        config = h.load_config("config.yml") if config_path is None else h.load_config(config_path)
+        self.input_dir = config["input_dir"]
+        self.input_type = config["input_type"]
+        self.tables = config["tables"]
+        self.dropdown_options_y = config["dropdown_options_y"]
+        self.dropdown_options_x = config["dropdown_options_x"]
         if self.input_type not in ["excel", "sqlite"]:
             raise ValueError("Invalid input type. Please choose either 'excel' or 'sqlite'.")
-
-        settings = h.load_config('settings.yml')
-        self.tables = settings["tables"]
-        self.dropdown_options_y = settings["dropdown_options_y"]
-        self.dropdown_options_x = settings["dropdown_options_x"]
 
         # check if i, la, vLineP, k and pPmax are in the tables
         if "i" not in self.tables:
@@ -45,7 +45,6 @@ class LegoGPT:
      
     def load_data(self, ):
         """ Load network data from LEGO results file. """
-
 
         if self.input_type == "sqlite":
             # connect to the database
@@ -104,7 +103,6 @@ class LegoGPT:
                             break  # Stop searching once a match is found
             self.coords = h.load_lat_lon(self.input_dir)
             
-
         elif self.input_type == "excel":
             for table in self.tables:
                 print(f"Loading table {table}...")
@@ -130,7 +128,6 @@ class LegoGPT:
 
 
             # drop where everything except value is the same
-
                            
         else:
             raise ValueError("Invalid input type. Please choose either 'excel' or 'sqlite'.")
@@ -658,6 +655,7 @@ class LegoGPT:
 if __name__ == "__main__":
     # check if there exists a config file in the current directory, if not copy it from the default config file
     if not os.path.exists("config.yml"):
-        h.copy_default_config()    
+        h.copy_default_config() # copy the default config file if it does not exist   
     else:
-        LegoGPT().run()
+        LegoGPT().run() # run with standard config file
+        #LegoGPT(config_path="config.yml").run() # run with custom config file

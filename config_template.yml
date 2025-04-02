@@ -1,2 +1,32 @@
 input_type: excel # excel or sqlite
 input_dir: "path_to_directory" # directory with the input
+
+tables:
+  - rp
+  - k
+  - i
+  - g
+  - gi
+  - la
+  - vLineP
+  - vGenP
+  - vStIntraRes
+  - vStInterRes
+  - pDemandP
+  - pPmax
+
+dropdown_options_y:
+  - label: "Y: Dispatch"
+    value: "dispatch"
+  - label: "Y: Power Flow"
+    value: "power_flow"
+  - label: "Y: Demand"
+    value: "demand"
+
+dropdown_options_x:
+  - label: "X: Time"
+    value: "time"
+  - label: "X: Generator"
+    value: "generator"
+  - label: "X: Line"
+    value: "line"
