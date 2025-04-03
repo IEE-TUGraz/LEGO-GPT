@@ -2,13 +2,10 @@ import dash
 from dash import dcc, html, Input, Output, ctx
 import dash_leaflet as dl
 import numpy as np
-import pandas as pd
-import plotly.express as px
-import matplotlib.pyplot as plt
-import random
-import sqlite3
 import os
 import helper_functions as h
+from data_loader import load_data
+from ui_handler import generate_network_map, generate_dynamic_plot
 
 class LegoGPT:
     """ Class to visualize LEGO results. """
@@ -23,20 +20,15 @@ class LegoGPT:
         self.tables = config["tables"]
         self.dropdown_options_y = config["dropdown_options_y"]
         self.dropdown_options_x = config["dropdown_options_x"]
+
         if self.input_type not in ["excel", "sqlite", "V2G"]:
             raise ValueError("Invalid input type. Please choose either 'excel', 'sqlite' or V2G.")
 
-        # check if i, la, vLineP, k and pPmax are in the tables
-        if "i" not in self.tables:
-            raise ValueError("i table is missing in the input data.")
-        if "la" not in self.tables:
-            raise ValueError("la table is missing in the input data.")
-        if "vLineP" not in self.tables:
-            raise ValueError("vLineP table is missing in the input data.")
-        if "pPmax" not in self.tables:
-            raise ValueError("pPmax table is missing in the input data.")
-        if "k" not in self.tables:
-            raise ValueError("k table is missing in the input data.")
+        required_tables = ["i", "la", "vLineP", "pPmax", "k"]
+        missing = [t for t in required_tables if t not in self.tables]
+        if missing:
+            raise ValueError(f"Missing required table(s): {', '.join(missing)}")
+
 
         self.load_data()  # Load data on initialization
         self.create_app()  # Initialize Dash app
@@ -45,286 +37,8 @@ class LegoGPT:
      
     def load_data(self, ):
         """ Load network data from LEGO results file. """
-
-        if self.input_type == "sqlite":
-            # connect to the database
-            conn = sqlite3.connect(os.path.join(self.input_dir, "result.sqlite"))
-            # print out all tables in the database
-            cursor = conn.cursor()
-            cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
-            # print(cursor.fetchall())
-
-
-            for table in self.tables:
-                # load the data as variable with the table name
-                setattr(self, table, h.extract_table_to_dataframe(conn, table))
-            
-            if "rp" in self.tables:
-                # region remove unnecessary index column in sets
-                self.rp.drop(columns=["index"], inplace=True)
-                self.rp.rename(columns={"0": "values"}, inplace=True)
-            if "k" in self.tables:
-                self.k.drop(columns=["index"], inplace=True)
-                self.k.rename(columns={"0": "values"}, inplace=True)
-            if "i" in self.tables:
-                self.i.drop(columns=["index"], inplace=True)    
-                self.i.rename(columns={"0": "values"}, inplace=True)
-            if "g" in self.tables:
-                self.g.drop(columns=["index"], inplace=True)
-                self.g.rename(columns={"0": "values"}, inplace=True)
-            if "gi" in self.tables:
-                self.gi.rename(columns={"0": "g"}, inplace=True)
-                self.gi.rename(columns={"1": "i"}, inplace=True)
-                self.gi.drop(columns=["index"], inplace=True)
-            if "la" in self.tables:
-                self.la.drop(columns=["index"], inplace=True)
-                self.la.rename(columns={"0": "i"}, inplace=True)
-                self.la.rename(columns={"1": "j"}, inplace=True)
-                self.la.rename(columns={"2": "c"}, inplace=True)
-            if "pPmax" in self.tables:
-                self.pPmax.rename(columns={"level_0": "i"}, inplace=True)
-                self.pPmax.rename(columns={"level_1": "j"}, inplace=True)
-                self.pPmax.rename(columns={"level_2": "c"}, inplace=True)
-            if "vLineP" in self.tables:
-                self.vLineP.rename(columns={"level_0": "rp"}, inplace=True)
-                self.vLineP.rename(columns={"level_1": "k"}, inplace=True)
-                self.vLineP.rename(columns={"level_2": "i"}, inplace=True)
-                self.vLineP.rename(columns={"level_3": "j"}, inplace=True)
-                self.vLineP.rename(columns={"level_4": "c"}, inplace=True)
-                # Iterate over vLineP DataFrame
-                for row_idx, row in enumerate(self.vLineP.itertuples(index=True)):  # Keep index for modification
-                    node_set = {row.i, row.j}  # Use set for order-independent comparison
-
-                    # Iterate over self.la DataFrame to find the matching line
-                    for idx, line in enumerate(self.la.itertuples(index=False)):
-                        if {line.i, line.j} == node_set:
-                            # Update the corresponding row in vLineP
-                            self.vLineP.at[row_idx, "line"] = str(int(idx))  # Use row index from enumerate
-                            break  # Stop searching once a match is found
-            self.coords = h.load_lat_lon(self.input_dir)
-            
-        elif self.input_type == "excel":
-            for table in self.tables:
-                print(f"Loading table {table}...")
-                if table == "vLineP":
-                    df, df_lines = h.extract_excel_to_dataframe(self.input_dir, table)
-                    self.vLineP = df
-                    self.la = df_lines
-                elif table == "gi":
-                    df, df_g = h.extract_excel_to_dataframe(self.input_dir, table)
-                    self.gi = df
-                    self.g = df_g
-                elif table == "la" or table == "g": # get from other dataframe
-                    continue
-                else:
-                    # load the data as variable with the table name
-                    setattr(self, table, h.extract_excel_to_dataframe(self.input_dir, table))
-            self.coords = h.extract_excel_to_dataframe(self.input_dir, "coords")
-
-            # only take values where duplicate is False
-            self.vLineP = self.vLineP[self.vLineP["duplicate"] == False].copy()
-            # drop duplicate column
-            self.vLineP.drop(columns=["duplicate"], inplace=True)
-
-        elif self.input_type == "V2G":
-
-            # connect to the database
-            conn = sqlite3.connect(os.path.join(self.input_dir, "result.sqlite"))
-            # print out all tables in the database
-            cursor = conn.cursor()
-            cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
-            # print(cursor.fetchall())
-
-            for table in self.tables:
-                print(f"Loading table {table}...")
-
-                if table == "vLineP":
-                    table_name = "vP"
-                elif table == "la":
-                    table_name = "Branches"
-                elif table == "i":
-                    table_name = "Buses"
-                elif table == "pPmax":
-                    table_name = "thermal_lim"
-                elif table == "k":
-                    table_name = "Time"
-                else:
-                    table_name = table
-                # load the data as variable with the table name
-                setattr(self, table, h.extract_table_to_dataframe(conn, table_name))   
-
-            # merge self.lat and self.lon
-            buses = self.lat["Buses"].values.astype(str)
-            lat = self.lat["values"].values
-            long = self.long["values"].values
-            self.coords = pd.DataFrame({"values": buses, "lat": lat, "lon": long})
-            # delete self.lat and self.long
-            del self.lat
-            del self.long
-
-            # rename i columns
-            self.i.drop(columns=["index"], inplace=True)    
-            self.i.rename(columns={"0": "values"}, inplace=True)
-            # make sure the values are strings
-            self.i["values"] = self.i["values"].astype(str)
-
-            # rename pPmax columns
-            self.pPmax.rename(columns={"level_0": "i"}, inplace=True)
-            self.pPmax.rename(columns={"level_1": "j"}, inplace=True)
-            # transform i and j to type str
-            self.pPmax["i"] = self.pPmax["i"].astype(str)
-            self.pPmax["j"] = self.pPmax["j"].astype(str)
-
-            # rename la columns
-            self.la.drop(columns=["index"], inplace=True)
-            self.la.rename(columns={"0": "i"}, inplace=True)
-            self.la.rename(columns={"1": "j"}, inplace=True) 
-            # transform i and j to type str
-            self.la["i"] = self.la["i"].astype(str)
-            self.la["j"] = self.la["j"].astype(str)
-
-
-            # iterate over la and find lines based on set(i, j)
-            line_index_dict = {}  # frozenset(i,j) -> line index
-            line_list = []        # list of [i, j] in order
-            for row_idx, row in enumerate(self.la.itertuples(index=True)):  # Keep index for modification
-                ij_key = frozenset([row.i, row.j])
-
-                if ij_key not in line_index_dict:
-                    line_index_dict[ij_key] = len(line_index_dict)
-                    line_list.append([row.i, row.j])
-
-            # overwrite self.la with line_list df
-            self.la = pd.DataFrame(line_list, columns=["i", "j"])
-            # rename vLineP columns
-            self.vLineP.rename(columns={"level_0": "i"}, inplace=True)
-            self.vLineP.rename(columns={"level_1": "j"}, inplace=True)
-            self.vLineP.rename(columns={"level_2": "k"}, inplace=True) 
-            # change the k column to k0001, k0002, ...
-            self.vLineP["k"] = self.vLineP["k"].apply(lambda x: f"k{int(x+1):04d}") 
-            # transform i and j to type str
-            self.vLineP["i"] = self.vLineP["i"].astype(str)
-            self.vLineP["j"] = self.vLineP["j"].astype(str)
-
-            # initialize "is_duplicate" column to vLineP
-            self.vLineP["duplicate"] = False
+        load_data(self)
         
-            # iterate over vLineP and find lines based on set(i, j)
-            for row_idx, row in enumerate(self.vLineP.itertuples(index=True)):  # Keep index for modification
-                ij_key = frozenset([row.i, row.j])
-                line = line_index_dict[ij_key]
-                is_duplicate = [row.i, row.j] != line_list[line]
-                # Update the corresponding row in vLineP
-                self.vLineP.at[row_idx, "line"] = str(int(line))
-                self.vLineP.at[row_idx, "duplicate"] = is_duplicate
-            
-            # reverse  the value of the flow if the line is duplicate
-            self.vLineP.loc[self.vLineP["duplicate"] == True, "values"] = -self.vLineP.loc[self.vLineP["duplicate"] == True, "values"]
-            # always find the two rows with the same "line" and "k" and set their "values" to the mean of the two values
-            self.vLineP["values"] = self.vLineP.groupby(["line", "k"])["values"].transform(lambda x: x.mean() if len(x) > 1 else x)       
-            # drop all entries where the "duplicate" is True
-            self.vLineP = self.vLineP[self.vLineP["duplicate"] == False].copy() 
-            # drop duplicate column
-            self.vLineP.drop(columns=["duplicate"], inplace=True) 
-            # reset index
-            self.vLineP.reset_index(drop=True, inplace=True)    
-
-
-            # iterate over pPmax and add drop duplicate lines
-            for row_idx, row in enumerate(self.pPmax.itertuples(index=True)):  # Keep index for modification
-                node_list = [row.i, row.j]
-                # check if the line is in the line_list
-                if node_list not in line_list:
-                    # drop the line from pPmax
-                    self.pPmax.drop(row_idx, inplace=True)
-            # reset index
-            self.pPmax.reset_index(drop=True, inplace=True)
-
-                        
-       
-        else:
-            raise ValueError("Invalid input type. Please choose either 'excel' or 'sqlite'.")
-        
-        if "i" in self.tables:
-            # add the coordinates in coords to the i dataframe
-            self.i = pd.merge(self.i, self.coords, left_on="values", right_on="values", how="left")
-            # set the index to the values column
-            self.i.set_index("values", inplace=True)
-
-        if "pPmax" in self.tables:
-            # iterate over pPmax and add the line number to the dataframe
-            for row_idx, row in enumerate(self.pPmax.itertuples(index=True)):  # Keep index for modification
-                node_set = {row.i, row.j}  # Use set for order-independent comparison
-
-                # Iterate over self.la DataFrame to find the matching line
-                for idx, line in enumerate(self.la.itertuples(index=False)):
-                    if {line.i, line.j} == node_set:
-                        # Update the corresponding row in vLineP
-                        self.pPmax.at[row_idx, "line"] = str(int(idx))
-                        break  # Stop searching once a match is found
-
-        # Compute bounds for map display
-        self.bounds = [
-            [min(self.i['lat']), min(self.i['lon'])],
-            [max(self.i['lat']), max(self.i['lon'])]
-        ]
-
-        if "vLineP" in self.tables:
-            # add to every line in vLineP the value divided by pPmax
-            self.vLineP["rel_values"] = abs(self.vLineP["values"]) / self.vLineP["line"].map(
-                self.pPmax.set_index("line")["values"]
-            )
-            self.vLineP["pPmax"] = self.vLineP["line"].map(
-                self.pPmax.set_index("line")["values"]
-            )
-            self.vLineP_max = self.vLineP["values"].max()
-            self.vLineP_min = self.vLineP["values"].min()   
-
-    def filter_dataframe(self, attr_str: str, rp: str, scope: str, local_node: str=None, local_line: str=None, k_range: list = []) -> pd.DataFrame:
-        """"
-        Filter the dataframe based on the values for rp and k."
-        """
-
-        if attr_str == "vGenP":
-            df = self.vGenP
-            if df is None: # in case the attribute exits but is not loaded
-                return None
-            if not self.long_format:
-                df = df[df["rp"] == rp]
-            if len(k_range) > 0:
-                df = df[df["k"].isin(k_range)]
-            if scope == "Local":
-                g_local = self.gi[self.gi["i"] == local_node]
-                df = df[df["g"].isin(g_local["g"])]
-        elif attr_str == "pDemandP":
-            df = self.pDemandP
-            if df is None:
-                return None
-            if not self.long_format:
-                df = df[df["rp"] == rp]
-            if len(k_range) > 0:
-                df = df[df["k"].isin(k_range)]            
-            if scope == "Local":
-                df = df[df["i"] == local_node]
-            elif scope == "Global":
-                df = df.groupby(["k"]).sum().reset_index()
-        elif attr_str == "vLineP":
-            df = self.vLineP
-            if df is None:
-                return None
-            if not self.long_format:
-                df = df[df["rp"] == rp]
-            if len(k_range) > 0:
-                df = df[df["k"].isin(k_range)]
-            if scope == "Local":
-                df = df[df["line"] == local_line]
-                
-        else: 
-            df = None
-            
-
-        return df
-
     def create_app(self):
         """ Initialize Dash app. """
         self.app = dash.Dash(__name__, suppress_callback_exceptions=True, prevent_initial_callbacks=False)
@@ -514,79 +228,15 @@ class LegoGPT:
              # prevent_initial_call=True
         )
         def update_network(selected_period, selected_time, zoom_level):
-            # colors = self.generate_colors(selected_period, selected_time)
-
-            def generate_colors(vLineP_filtered):
-                color_values = vLineP_filtered["rel_values"].to_numpy()
-
-                color_map = plt.get_cmap('RdYlGn_r')
-                return [
-                    "#{:02x}{:02x}{:02x}".format(int(255 * c[0]), int(255 * c[1]), int(255 * c[2]))
-                    for c in [color_map(s) for s in color_values]
-                ]
-            
-            selected_time = f"k{selected_time:04d}"
-            if self.long_format:
-                vLineP_filtered = self.vLineP[(self.vLineP["k"] == selected_time)]
-            else:
-                vLineP_filtered = self.vLineP[(self.vLineP["rp"] == selected_period) & (self.vLineP["k"] == selected_time)]
-
-            positions = []
-            for i, j, flow in zip(vLineP_filtered["i"].values, vLineP_filtered["j"].values, vLineP_filtered["values"].values):
-                if flow < 0: # reverse the direction for the arrows
-                    positions.append([(self.i.loc[j, 'lat'], self.i.loc[j, 'lon']), (self.i.loc[i, 'lat'], self.i.loc[i, 'lon'])])
-                else:
-                    positions.append([(self.i.loc[i, 'lat'], self.i.loc[i, 'lon']), (self.i.loc[j, 'lat'], self.i.loc[j, 'lon'])])
-                
-            colors = generate_colors(vLineP_filtered)
-
-            polylines = [
-                dl.Polyline(
-                    positions=position,
-                    color=color, weight=2, id=str(int(line)),
-                    children=[
-                        dl.Popup(f"Power Flow: {abs(vLineP_filtered.iloc[idx]['values']):.2f} MW, Line rating: {vLineP_filtered.iloc[idx]['pPmax']:.2f} MW"),
-                    ],
-                    n_clicks=0
-                ) for idx, (position, line, color) in enumerate(zip(positions, vLineP_filtered["line"].values, colors))
-            ]
-            # make arrows using the same color as the line and use PolylineDecorator
-
-            def get_arrow_size(zoom):
-                # Adjust sensitivity if needed
-                if zoom == None:
-                    zoom =7              
-                return max(0.5, int(zoom * 1.2))
-            
-            def get_node_size(zoom):
-                # Adjust sensitivity if needed
-                if zoom == None:
-                    zoom =7              
-                return max(1.5, int(zoom * 0.9))
-
-            print(f"Zoom level: {zoom_level}")
-            arrow_size = get_arrow_size(zoom_level)
-            node_size = get_node_size(zoom_level)
-
-            patterns = [[dict(offset='50%', repeat='25%', arrowHead=dict(
-                pixelSize=arrow_size,
-                polygon=False,
-                pathOptions=dict(stroke=True, color=color)
-            ))] for color in colors]
-            arrows = [dl.PolylineDecorator(children=polyline, patterns=pattern, n_clicks=0) for polyline, pattern in zip (polylines, patterns)]
-            circles = [
-                dl.CircleMarker(
-                    center=(node.lat, node.lon),
-                    radius=node_size, fillColor="#8C564B", weight=1, color="black",
-                    fill=True, fillOpacity=1, id=node.Index,
-                    children=dl.Popup(node.Index), n_clicks=0
-                ) for node in self.i.itertuples(index=True)
-            ]
-
-    
-            # return [dl.TileLayer(url='https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',attribution='&copy; <a href="https://carto.com/">CARTO</a>'), dl.LayerGroup(children=arrows + circles, id="network-layer" + str(random.randint(0, 1000)))] # workaround, otherwise objects with same id are not updated!
-            return [dl.TileLayer(url='https://tile.jawg.io/jawg-light/{z}/{x}/{y}{r}.png?access-token=K29acH6XcPPrHIAdDENjCaooa47B7CDZieD4CPBI2EiVrg8iKRjqiS80D8ACx9Np'), dl.LayerGroup(children=arrows + circles, id="network-layer" + str(random.randint(0, 1000)))] # workaround, otherwise objects with same id are not updated!
-       
+            return generate_network_map(
+                vLineP=self.vLineP,
+                buses=self.i,
+                selected_period=selected_period,
+                selected_time=selected_time,
+                long_format=self.long_format,
+                zoom_level=zoom_level
+            )
+        
         @self.app.callback(
             Output("last-clicked-line", "data"),
             [Input(str(line.Index), "n_clicks") for line in self.la.itertuples(index=True)]
@@ -655,117 +305,17 @@ class LegoGPT:
 
         )
         def update_dynamic_plot(x_axis, y_axis, line_idx, node_idx, selected_period, scope, time_range):
-            """ Update the single plot based on selected x-axis, y-axis, last-clicked line or node. """
-
-            print(f"Updating plot: x_axis={x_axis}, y_axis={y_axis}, selected_period={selected_period}, selected_time_range={time_range}, local_node={node_idx}, local_line={line_idx}, scope={scope}")
-            print(f"Scope: {scope}")
-
-            fig = None # Initialize figure
-            y_df = None
-            k_range = [str(f"k{time:04d}") for time in range(time_range[0], time_range[1] + 1 )] if self.long_format else self.k["values"].values.tolist()
-
-            if y_axis == "demand":
-                y_df = self.filter_dataframe("pDemandP", rp=selected_period, scope=scope, local_node=node_idx, k_range=k_range)
-            elif y_axis == "dispatch":
-                y_df = self.filter_dataframe("vGenP", rp=selected_period, scope=scope, local_node=node_idx, k_range=k_range)
-            elif y_axis == "power_flow":
-                y_df = self.filter_dataframe("vLineP", rp=selected_period, scope=scope, local_line=line_idx, k_range=k_range)
-            
-            if y_df is not None and not y_df.empty:
-                if x_axis == "time":
-                    x_label = "Time"
-                    if y_axis == "dispatch":
-                        title = "Global dispatch over time" if scope == "Global" else f"Local dispatch for {node_idx} over time"
-
-                        fig = px.area(
-                            y_df,
-                            x="k",  # Use categorical 'k' for x-axis
-                            y="values",
-                            color="g",  # Different colors for each generator
-                            title=title,
-                            labels={"k": x_label, "values": "Dispatch", "g": "Generator"},
-                        )
-                    elif y_axis == "demand":
-                        fig = px.line(
-                            y_df,
-                            x="k",  # Use categorical 'i' for x-axis
-                            y="values",
-                            title="Demand Over Time",
-                            labels={"i": x_label, "values": "Demand"},
-                        )
-                    elif y_axis == "power_flow":
-                        fig = px.line(
-                            y_df,
-                            x="k",  # Use categorical 'k' for x-axis
-                            y="values",
-                            color="line",  # Different colors for each line
-                            title="Power Flow over time" if scope == "Global" else f"Local Power Flow for {line_idx} over time",
-                            labels={"k": x_label, "values": "Power Flow", "line": "Line"},
-                            hover_data={"values": True, "line": True, "i": True, "j": True}  # Show values and line on hover
-                        )
-
-
-                elif x_axis == "generator":
-                    x_label = "Generator"
-                    if y_axis == "dispatch":
-                        y_df["k"] = y_df["k"].astype(str)
-                        y_df["g"] = y_df["g"].astype(str)
-                        y_df["values"] = pd.to_numeric(y_df["values"], errors="coerce")
-                        fig = px.bar(
-                            y_df,
-                            x="g",  # Use categorical 'g' for x-axis
-                            y="values",
-                            color="g",  # Different colors for each generator
-                            title="Global dispatch for each generator" if scope == "Global" else f"Local dispatch for {node_idx}",
-                            labels={"g": x_label, "values": "Dispatch", "k": "Time"},
-                            hover_data={"values": False, "k": False}  # Show values and time on hover
-                        )
-
-               
-                elif x_axis == "line":
-                    x_label = "Line"
-                    if y_axis == "power_flow":
-                        # make histogram of all lineflow values
-                        fig = px.histogram(
-                            y_df,
-                            x="values",
-                            color="line",
-                            title="Power Flow Distribution over all Lines" if scope == "Global" else f"Local Power Flow Distribution for {line_idx}",
-                            # labels={"values": "Power Flow", "line": "Line"},
-                            nbins=10,
-                            range_x=[self.vLineP_min, self.vLineP_max]
-                        )
-
-            # check if a figure fig was created
-            if fig is None:
-                fig = px.scatter(title="Select a valid combination for the plot")
-
-            # set title center
-            fig.update_layout(title_x=0.5)    
-            # Fix the plot size (domain of axes) to a specific portion of the figure
-            fig.update_layout(
-                xaxis=dict(domain=[0, 0.85]),  # Plot takes 90% of the width
-                yaxis=dict(domain=[0, 1]),    # Full height
-                legend=dict(
-                    x=0.85,
-                    y=1,
-                    xanchor="left",
-                    yanchor="top",
-                ),
-                margin=dict(l=0, r=40, t=40, b=40)
+            return generate_dynamic_plot(
+                self=self,
+                x_axis=x_axis,
+                y_axis=y_axis,
+                line_idx=line_idx,
+                node_idx=node_idx,
+                selected_period=selected_period,
+                scope=scope,
+                time_range=time_range
             )
-            # update the background color
-            fig.update_layout(paper_bgcolor="#E1EDED", plot_bgcolor="#E1EDED")
-            # set the font size
-            fig.update_layout(font_size=14)
-            # set axis labels bold
-            fig.update_layout(
-                xaxis_title_font=dict(size=18, color='black'),  
-                yaxis_title_font=dict(size=18, color='black')
-            )   
-
-            return html.Div([dcc.Graph(figure=fig, id="dynamic-plot" + str(random.randint(0, 1000)), style={'height': '100%', 'width': '100%', })], style={'flex': '1', 'min-width': '0', 'height': '90vh', 'margin-top': '0px'})
-
+    
     def run(self):
         """ Start the Dash server. """
         self.app.run(debug=False)
