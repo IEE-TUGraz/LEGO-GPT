@@ -7,8 +7,15 @@ import plotly.express as px
 import random
 from dash import html, dcc
 
-def generate_network_map(vLineP, buses, selected_period, selected_time, long_format, zoom_level):
+def generate_network_map(vLineP, buses, selected_period, selected_time, long_format, zoom_level, map_options):
     selected_time = f"k{selected_time:04d}"
+    # Use config values
+    line_weight = map_options["line_weight"]
+    arrow_scale = map_options["arrow_zoom_scale"]
+    arrow_min = map_options["arrow_min_size"]
+    node_scale = map_options["node_zoom_scale"]
+    node_min = map_options["node_min_size"]
+    default_zoom = map_options["default_zoom"]
 
     if long_format:
         vLineP_filtered = vLineP[vLineP["k"] == selected_time]
@@ -33,7 +40,7 @@ def generate_network_map(vLineP, buses, selected_period, selected_time, long_for
     polylines = [
         dl.Polyline(
             positions=position,
-            color=color, weight=2, id=str(int(line)),
+            color=color, weight=line_weight, id=str(int(line)),
             children=[
                 dl.Popup(f"Power Flow: {abs(vLineP_filtered.iloc[idx]['values']):.2f} MW, Line rating: {vLineP_filtered.iloc[idx]['pPmax']:.2f} MW"),
             ],
@@ -43,13 +50,13 @@ def generate_network_map(vLineP, buses, selected_period, selected_time, long_for
 
     def get_arrow_size(zoom):
         if zoom is None:
-            zoom = 7
-        return max(0.5, int(zoom * 1.2))
+            zoom = default_zoom
+        return max(arrow_min, int(zoom * arrow_scale))
 
     def get_node_size(zoom):
         if zoom is None:
-            zoom = 7
-        return max(1.5, int(zoom * 0.9))
+            zoom = default_zoom
+        return max(node_min, int(zoom * node_scale))
 
     arrow_size = get_arrow_size(zoom_level)
     node_size = get_node_size(zoom_level)

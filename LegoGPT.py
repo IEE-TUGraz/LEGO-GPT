@@ -20,6 +20,7 @@ class LegoGPT:
         self.tables = config["tables"]
         self.dropdown_options_y = config["dropdown_options_y"]
         self.dropdown_options_x = config["dropdown_options_x"]
+        self.map_options = config["map_options"]
 
         if self.input_type not in ["excel", "sqlite", "V2G"]:
             raise ValueError("Invalid input type. Please choose either 'excel', 'sqlite' or V2G.")
@@ -234,7 +235,8 @@ class LegoGPT:
                 selected_period=selected_period,
                 selected_time=selected_time,
                 long_format=self.long_format,
-                zoom_level=zoom_level
+                zoom_level=zoom_level,
+                map_options=self.map_options,
             )
         
         @self.app.callback(

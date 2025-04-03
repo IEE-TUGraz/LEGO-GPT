@@ -1,4 +1,4 @@
-input_type: excel # excel or sqlite
+input_type: excel # excel, sqlite  or V2G
 input_dir: "path_to_directory" # directory with the input
 
 tables:
@@ -30,3 +30,11 @@ dropdown_options_x:
     value: "generator"
   - label: "X: Line"
     value: "line"
+
+map_options:
+  line_weight: 2
+  default_zoom: 7
+  arrow_zoom_scale: 1.2
+  arrow_min_size: 0.5
+  node_zoom_scale: 0.9
+  node_min_size: 1.5
