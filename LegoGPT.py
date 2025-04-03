@@ -195,7 +195,7 @@ class LegoGPT:
 
             dcc.Store(id="last-clicked-line", data=self.la.index[0]),
             dcc.Store(id="last-clicked-node", data=self.i.index[0]),
-            dcc.Store(id="map-zoom", data=7),  # Default zoom
+            dcc.Store(id="map-zoom", data=self.map_options["default_zoom"]),  # Default zoom
 
             # === MAIN SECTION: Map + Graph ===
             html.Div([
@@ -207,7 +207,7 @@ class LegoGPT:
                                      attribution='&copy; <a href="https://carto.com/">CARTO</a>'),
                         dl.LayerGroup(id="network-layer"),
                     ], bounds=self.bounds, style={'height': '100%', 'width': '100%', 'background-color': '#6BA3A3'}, id="network-map",
-                    zoom=6, center=[np.mean(self.i['lat']), np.mean(self.i['lon'])]),
+                    zoom=self.map_options["default_zoom"], center=[np.mean(self.i['lat']), np.mean(self.i['lon'])]),
                 ], style={'flex': '1', 'min-width': '0', 'height': '90vh'}),
 
                 # Right Section: Graph
