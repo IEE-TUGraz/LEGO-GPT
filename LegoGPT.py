@@ -6,6 +6,7 @@ import os
 import helper_functions as h
 from data_loader import load_data
 from ui_handler import generate_network_map, generate_dynamic_plot
+import sys
 
 class LegoGPT:
     """ Class to visualize LEGO results. """
@@ -323,9 +324,15 @@ class LegoGPT:
         self.app.run(debug=False)
 
 if __name__ == "__main__":
-    # check if there exists a config file in the current directory, if not copy it from the default config file
-    if not os.path.exists("config.yml"):
-        h.copy_default_config() # copy the default config file if it does not exist   
+    # check for passed config file (if calling from command line)
+    if len(sys.argv) > 1:
+        config_path = sys.argv[1]
     else:
-        LegoGPT().run() # run with standard config file
-        #LegoGPT(config_path="config.yml").run() # run with custom config file
+        config_path = "config.yml"
+
+    # fallback if config doesn't exist
+    if not os.path.exists(config_path):
+        h.copy_default_config()  # assumes it writes to config.yml
+    else:
+        # Run with specified config
+        LegoGPT(config_path=config_path).run()
