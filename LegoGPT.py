@@ -23,8 +23,8 @@ class LegoGPT:
         self.tables = config["tables"]
         self.dropdown_options_y = config["dropdown_options_y"]
         self.dropdown_options_x = config["dropdown_options_x"]
-        if self.input_type not in ["excel", "sqlite"]:
-            raise ValueError("Invalid input type. Please choose either 'excel' or 'sqlite'.")
+        if self.input_type not in ["excel", "sqlite", "V2G"]:
+            raise ValueError("Invalid input type. Please choose either 'excel', 'sqlite' or V2G.")
 
         # check if i, la, vLineP, k and pPmax are in the tables
         if "i" not in self.tables:
@@ -126,9 +126,122 @@ class LegoGPT:
             # drop duplicate column
             self.vLineP.drop(columns=["duplicate"], inplace=True)
 
+        elif self.input_type == "V2G":
 
-            # drop where everything except value is the same
-                           
+            # connect to the database
+            conn = sqlite3.connect(os.path.join(self.input_dir, "result.sqlite"))
+            # print out all tables in the database
+            cursor = conn.cursor()
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+            # print(cursor.fetchall())
+
+            for table in self.tables:
+                print(f"Loading table {table}...")
+
+                if table == "vLineP":
+                    table_name = "vP"
+                elif table == "la":
+                    table_name = "Branches"
+                elif table == "i":
+                    table_name = "Buses"
+                elif table == "pPmax":
+                    table_name = "thermal_lim"
+                elif table == "k":
+                    table_name = "Time"
+                else:
+                    table_name = table
+                # load the data as variable with the table name
+                setattr(self, table, h.extract_table_to_dataframe(conn, table_name))   
+
+            # merge self.lat and self.lon
+            buses = self.lat["Buses"].values.astype(str)
+            lat = self.lat["values"].values
+            long = self.long["values"].values
+            self.coords = pd.DataFrame({"values": buses, "lat": lat, "lon": long})
+            # delete self.lat and self.long
+            del self.lat
+            del self.long
+
+            # rename i columns
+            self.i.drop(columns=["index"], inplace=True)    
+            self.i.rename(columns={"0": "values"}, inplace=True)
+            # make sure the values are strings
+            self.i["values"] = self.i["values"].astype(str)
+
+            # rename pPmax columns
+            self.pPmax.rename(columns={"level_0": "i"}, inplace=True)
+            self.pPmax.rename(columns={"level_1": "j"}, inplace=True)
+            # transform i and j to type str
+            self.pPmax["i"] = self.pPmax["i"].astype(str)
+            self.pPmax["j"] = self.pPmax["j"].astype(str)
+
+            # rename la columns
+            self.la.drop(columns=["index"], inplace=True)
+            self.la.rename(columns={"0": "i"}, inplace=True)
+            self.la.rename(columns={"1": "j"}, inplace=True) 
+            # transform i and j to type str
+            self.la["i"] = self.la["i"].astype(str)
+            self.la["j"] = self.la["j"].astype(str)
+
+
+            # iterate over la and find lines based on set(i, j)
+            line_index_dict = {}  # frozenset(i,j) -> line index
+            line_list = []        # list of [i, j] in order
+            for row_idx, row in enumerate(self.la.itertuples(index=True)):  # Keep index for modification
+                ij_key = frozenset([row.i, row.j])
+
+                if ij_key not in line_index_dict:
+                    line_index_dict[ij_key] = len(line_index_dict)
+                    line_list.append([row.i, row.j])
+
+            # overwrite self.la with line_list df
+            self.la = pd.DataFrame(line_list, columns=["i", "j"])
+            # rename vLineP columns
+            self.vLineP.rename(columns={"level_0": "i"}, inplace=True)
+            self.vLineP.rename(columns={"level_1": "j"}, inplace=True)
+            self.vLineP.rename(columns={"level_2": "k"}, inplace=True) 
+            # change the k column to k0001, k0002, ...
+            self.vLineP["k"] = self.vLineP["k"].apply(lambda x: f"k{int(x+1):04d}") 
+            # transform i and j to type str
+            self.vLineP["i"] = self.vLineP["i"].astype(str)
+            self.vLineP["j"] = self.vLineP["j"].astype(str)
+
+            # initialize "is_duplicate" column to vLineP
+            self.vLineP["duplicate"] = False
+        
+            # iterate over vLineP and find lines based on set(i, j)
+            for row_idx, row in enumerate(self.vLineP.itertuples(index=True)):  # Keep index for modification
+                ij_key = frozenset([row.i, row.j])
+                line = line_index_dict[ij_key]
+                is_duplicate = [row.i, row.j] != line_list[line]
+                # Update the corresponding row in vLineP
+                self.vLineP.at[row_idx, "line"] = str(int(line))
+                self.vLineP.at[row_idx, "duplicate"] = is_duplicate
+            
+            # reverse  the value of the flow if the line is duplicate
+            self.vLineP.loc[self.vLineP["duplicate"] == True, "values"] = -self.vLineP.loc[self.vLineP["duplicate"] == True, "values"]
+            # always find the two rows with the same "line" and "k" and set their "values" to the mean of the two values
+            self.vLineP["values"] = self.vLineP.groupby(["line", "k"])["values"].transform(lambda x: x.mean() if len(x) > 1 else x)       
+            # drop all entries where the "duplicate" is True
+            self.vLineP = self.vLineP[self.vLineP["duplicate"] == False].copy() 
+            # drop duplicate column
+            self.vLineP.drop(columns=["duplicate"], inplace=True) 
+            # reset index
+            self.vLineP.reset_index(drop=True, inplace=True)    
+
+
+            # iterate over pPmax and add drop duplicate lines
+            for row_idx, row in enumerate(self.pPmax.itertuples(index=True)):  # Keep index for modification
+                node_list = [row.i, row.j]
+                # check if the line is in the line_list
+                if node_list not in line_list:
+                    # drop the line from pPmax
+                    self.pPmax.drop(row_idx, inplace=True)
+            # reset index
+            self.pPmax.reset_index(drop=True, inplace=True)
+
+                        
+       
         else:
             raise ValueError("Invalid input type. Please choose either 'excel' or 'sqlite'.")
         
@@ -176,7 +289,7 @@ class LegoGPT:
             df = self.vGenP
             if df is None: # in case the attribute exits but is not loaded
                 return None
-            if "rp" in df.columns:
+            if not self.long_format:
                 df = df[df["rp"] == rp]
             if len(k_range) > 0:
                 df = df[df["k"].isin(k_range)]
@@ -187,7 +300,7 @@ class LegoGPT:
             df = self.pDemandP
             if df is None:
                 return None
-            if "rp" in df.columns:
+            if not self.long_format:
                 df = df[df["rp"] == rp]
             if len(k_range) > 0:
                 df = df[df["k"].isin(k_range)]            
@@ -199,7 +312,7 @@ class LegoGPT:
             df = self.vLineP
             if df is None:
                 return None
-            if "rp" in df.columns:
+            if not self.long_format:
                 df = df[df["rp"] == rp]
             if len(k_range) > 0:
                 df = df[df["k"].isin(k_range)]
@@ -219,10 +332,15 @@ class LegoGPT:
     def setup_layout(self):
         """ Define app layout. """
 
-        self.long_format = True if (len(self.rp) == 1 and len(self.k) > 24) or "rp" not in self.tables else False
+        self.long_format = True if "rp" not in self.tables or (len(self.rp) == 1 and len(self.k) > 24) else False
         display_time_range = 'block' if self.long_format else 'none'
         display_rp = 'none' if self.long_format else 'block'
-
+        if not self.long_format:
+            options = [{"label": f"Period: {p}", "value": p} for p in self.rp["values"].values]
+            value = self.rp["values"][0]
+        else:
+            options = ["Period: All"]
+            value = "All"
         self.app.layout = html.Div([
 
             # === GLOBAL TOP CONTROLS ROW (RP dropdown + Slider on left, Axis dropdowns + Button on right) ===
@@ -232,8 +350,8 @@ class LegoGPT:
                     html.Div([
                         dcc.Dropdown(
                             id='rep-period-dropdown',
-                            options=[{"label": f"Period: {p}", "value": p} for p in self.rp["values"].values],
-                            value=self.rp["values"][0],
+                            options=options,
+                            value=value,
                             clearable=False,
                             style={'width': '130px', 'font-weight': 'bold'},
                         ),
@@ -408,9 +526,10 @@ class LegoGPT:
                 ]
             
             selected_time = f"k{selected_time:04d}"
-            vLineP_filtered = self.vLineP[
-                    (self.vLineP["rp"] == selected_period) & (self.vLineP["k"] == selected_time) # NOTE: check if vLineP exists in both directions -> DOES NOT!
-                ]
+            if self.long_format:
+                vLineP_filtered = self.vLineP[(self.vLineP["k"] == selected_time)]
+            else:
+                vLineP_filtered = self.vLineP[(self.vLineP["rp"] == selected_period) & (self.vLineP["k"] == selected_time)]
 
             positions = []
             for i, j, flow in zip(vLineP_filtered["i"].values, vLineP_filtered["j"].values, vLineP_filtered["values"].values):
@@ -431,7 +550,6 @@ class LegoGPT:
                     n_clicks=0
                 ) for idx, (position, line, color) in enumerate(zip(positions, vLineP_filtered["line"].values, colors))
             ]
-
             # make arrows using the same color as the line and use PolylineDecorator
 
             def get_arrow_size(zoom):
