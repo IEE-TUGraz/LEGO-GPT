@@ -116,11 +116,11 @@ def load_data(obj, ):
         # merge self.lat and self.lon
         buses = self.lat["Buses"].values.astype(str)
         lat = self.lat["values"].values
-        long = self.long["values"].values
-        self.coords = pd.DataFrame({"values": buses, "lat": lat, "lon": long})
+        lon = self.lon["values"].values
+        self.coords = pd.DataFrame({"values": buses, "lat": lat, "lon": lon})
         # delete self.lat and self.long
         del self.lat
-        del self.long
+        del self.lon
 
         # rename i columns
         self.i.drop(columns=["index"], inplace=True)    
