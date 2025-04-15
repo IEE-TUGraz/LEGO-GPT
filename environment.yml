@@ -1,4 +1,4 @@
-name: LEGO-GPT_env
+name: LEGO_GPT_env
 channels:
   - defaults
   - conda-forge
@@ -14,7 +14,21 @@ dependencies:
   - python=3.12.2
   - pyyaml=6.0.2
 
+  # Sphinx core and extensions
+  - sphinx=8.2.3
+  - babel=2.16.0
+  - pygments=2.19.1
+  - snowballstemmer=2.2.0
+  - imagesize=1.4.1
+  - pip  # needed for pip installs below
 
+  # Anything not available on conda
+  - pip:
+      - sphinx_rtd_theme
+      - roman-numerals
+      - myst-parser
+      - sphinx-autobuild
+      - docutils
   
   
 
