@@ -8,7 +8,7 @@ from data_loader import get_data
 from ui_handler import generate_network_map, generate_dynamic_plot
 import sys
 
-class LegoGPT:
+class LEGO_GPT:
     """
     This class is designed to create an interactive Dash web application for visualizing and analyzing network data 
     from LEGO results files. It provides a user-friendly interface with dropdowns, sliders, and interactive maps 
@@ -483,4 +483,4 @@ if __name__ == "__main__":
         h.copy_default_config()  # assumes it writes to config.yml
     else:
         # Run with specified config
-        LegoGPT(config_path=config_path).run()
+        LEGO_GPT(config_path=config_path).run()
