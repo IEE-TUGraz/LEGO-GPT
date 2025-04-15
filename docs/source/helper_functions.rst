@@ -1,5 +1,5 @@
-helper\_functions module
-------------------------
+helper\_functions
+-----------------
 
 .. automodule:: helper_functions
    :members:

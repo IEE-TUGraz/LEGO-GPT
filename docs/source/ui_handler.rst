@@ -1,5 +1,5 @@
-ui\_handler module
-------------------
+ui\_handler 
+-----------
 
 .. automodule:: ui_handler
    :members:
