@@ -15,16 +15,29 @@ class LEGO_GPT:
     to explore the data.
 
     Attributes:
-        input_dir (str): Directory containing input data files.
-        input_type (str): Type of input data ('excel', 'sqlite', or 'V2G').
-        tables (list): List containing tables to be loaded from the input data.
-        dropdown_options_y (list): Options for the Y-axis dropdown.
-        dropdown_options_x (list): Options for the X-axis dropdown.
-        map_options (dict): Configuration options for the map.
-        app (dash.Dash): Dash application instance.
-        long_format (bool): Flag indicating whether the data is in long format.
-        bounds (list): Map bounds for visualization.
+    -----------
+
+        input_dir (str): 
+            Directory containing input data files.
+        input_type (str): 
+            Type of input data ('excel', 'sqlite', or 'V2G').
+        tables (list): 
+            List containing tables to be loaded from the input data.
+        dropdown_options_y (list):
+            Options for the Y-axis dropdown.
+        dropdown_options_x (list): 
+            Options for the X-axis dropdown.
+        map_options (dict): 
+            Configuration options for the map.
+        app (dash.Dash): 
+            Dash application instance.
+        long_format (bool): 
+            Flag indicating whether the data is in long format.
+        bounds (list): 
+            Map bounds for visualization.
+
     Methods:
+    -------- 
         __init__(config_path: str = None):
             Initializes the LegoGPT class by loading configuration, validating input, and setting up the app.
         load_data():
@@ -119,36 +132,42 @@ class LEGO_GPT:
         This method defines the structure and components of the application's user interface, 
         including dropdowns, sliders, buttons, and visualizations such as maps and graphs. 
         The layout dynamically adjusts based on the data and configuration provided.
+
         Key Features:
-        - Dropdowns for selecting reporting periods, X-axis, and Y-axis options.
-        - A slider for selecting time periods, with an optional number input for precise selection.
-        - A range slider for selecting a range of time periods when in long format.
-        - A map visualization on the left side, displaying network data.
-        - A dynamic graph on the right side, which updates based on user interactions.
+            - Dropdowns for selecting reporting periods, X-axis, and Y-axis options.
+            - A slider for selecting time periods, with an optional number input for precise selection.
+            - A range slider for selecting a range of time periods when in long format.
+            - A map visualization on the left side, displaying network data.
+            - A dynamic graph on the right side, which updates based on user interactions.
+
         Components:
-        - Reporting Period Dropdown: Allows selection of a specific reporting period.
-        - Time Slider: Enables navigation through time periods.
-        - Time Slider Input: Provides precise input for time periods (visible in long format).
-        - Axis Dropdowns: Allows selection of X-axis and Y-axis variables for the graph.
-        - Local Button: A button for toggling scope or triggering specific actions.
-        - Range Slider: Allows selection of a range of time periods (visible in long format).
-        - Map: Displays a network visualization with tile layers and markers.
-        - Graph: Displays dynamic plots based on selected data.
+            - Reporting Period Dropdown: Allows selection of a specific reporting period.
+            - Time Slider: Enables navigation through time periods.
+            - Time Slider Input: Provides precise input for time periods (visible in long format).
+            - Axis Dropdowns: Allows selection of X-axis and Y-axis variables for the graph.
+            - Local Button: A button for toggling scope or triggering specific actions.
+            - Range Slider: Allows selection of a range of time periods (visible in long format).
+            - Map: Displays a network visualization with tile layers and markers.
+            - Graph: Displays dynamic plots based on selected data.
+
         Stores:
-        - `last-clicked-line`: Stores the index of the last clicked line.
-        - `last-clicked-node`: Stores the index of the last clicked node.
-        - `map-zoom`: Stores the default zoom level for the map.
+            - `last-clicked-line`: Stores the index of the last clicked line.
+            - `last-clicked-node`: Stores the index of the last clicked node.
+            - `map-zoom`: Stores the default zoom level for the map.
+
         Layout Structure:
-        - Top Row: Contains global controls such as dropdowns, sliders, and buttons.
-        - Main Section: Divided into two parts:
-            - Left: Map visualization.
-            - Right: Dynamic graph visualization.
+            - Top Row: Contains global controls such as dropdowns, sliders, and buttons.
+            - Main Section: Divided into two parts:
+                - Left: Map visualization.
+                - Right: Dynamic graph visualization.
+
         Styling:
-        - The layout is styled for responsiveness, with flexible widths and heights.
-        - Components are aligned and spaced for a clean and user-friendly interface.
+            - The layout is styled for responsiveness, with flexible widths and heights.
+            - Components are aligned and spaced for a clean and user-friendly interface.
+
         Note:
-        - The layout adapts based on the `long_format` flag, which determines the visibility 
-          of certain components and the configuration of sliders.
+            - The layout adapts based on the `long_format` flag, which determines the visibility 
+            of certain components and the configuration of sliders.
         """
 
         self.long_format = True if "rp" not in self.tables or (len(self.rp) == 1 and len(self.k) > 24) else False
@@ -326,6 +345,7 @@ class LEGO_GPT:
         Sets up all the Dash callbacks for the application.
         This method defines multiple callbacks to handle user interactions and update
         the application state dynamically. The callbacks include:
+
         1. `update_network`: Updates the network map based on the selected period, 
             time, and zoom level.
             - Outputs: Updates the "children" property of the "network-map" component.
@@ -336,8 +356,7 @@ class LEGO_GPT:
         3. `store_last_clicked_node`: Stores the ID of the last clicked node.
             - Outputs: Updates the "data" property of the "last-clicked-node" component.
             - Inputs: Click events for each node in the dataset.
-        4. `sync_slider_and_input`: Synchronizes the values of the time slider and its 
-            corresponding input field.
+        4. `sync_slider_and_input`: Synchronizes the values of the time slider and its corresponding input field.
             - Outputs: Updates the "value" properties of both the "time-slider" and 
               "time-slider-input" components.
             - Inputs: "time-slider" value and "time-slider-input" value.
@@ -348,9 +367,7 @@ class LEGO_GPT:
         6. `store_map_zoom`: Stores the current zoom level of the network map.
             - Outputs: Updates the "data" property of the "map-zoom" component.
             - Inputs: "zoom" property of the "network-map" component.
-        7. `update_dynamic_plot`: Updates the dynamic plot based on various user 
-            inputs, including axis selections, clicked line or node, selected period, 
-            scope, and time range.
+        7. `update_dynamic_plot`: Updates the dynamic plot based on various user inputs, including axis selections, clicked line or node, selected period, scope, and time range.
             - Outputs: Updates the "children" property of the "dynamic-plot-container" 
               component.
             - Inputs: "x-axis-dropdown" value, "y-axis-dropdown" value, 
