@@ -2,8 +2,23 @@ import pandas as pd
 import os
 import yaml
 import time
+import sqlite3
 
 def load_lat_lon(input_dir: str):
+    """
+    Loads latitude and longitude data from an Excel file.
+    This function reads an Excel file named "Power_BusInfo.xlsx" located in the specified 
+    input directory. It extracts data from the sheet named "Power BusInfo", starting from 
+    row 7 (zero-indexed). The function selects specific columns, renames them, and returns 
+    the resulting DataFrame.
+    Args:
+        input_dir (str): The directory path where the "Power_BusInfo.xlsx" file is located.
+    Returns:
+        pandas.DataFrame: A DataFrame containing three columns:
+            - "values": Data from column 1 of the Excel sheet.
+            - "lat": Latitude data from column 12 of the Excel sheet.
+            - "lon": Longitude data from column 13 of the Excel sheet.
+    """
     sheetname = "Power BusInfo"
     filename = os.path.join(input_dir, "Power_BusInfo.xlsx")
     start_row = 7
@@ -13,16 +28,22 @@ def load_lat_lon(input_dir: str):
   
     return df
 
-def extract_table_to_dataframe(con, table_name):
+def extract_table_to_dataframe(con: sqlite3.Connection, table_name: str) -> pd.DataFrame:
     """
-    Extracts a table from an SQLite database into a Pandas DataFrame.
-
-    Parameters:
-        con (sqlite3.Connection): SQLite connection object.
-        table_name (str): Name of the table to extract.
-
+    Extracts the contents of a database table into a pandas DataFrame.
+    Args:
+        con (sqlite3.Connection): 
+            The database connection object.
+        table_name (str): 
+            The name of the table to extract data from.
     Returns:
-        pd.DataFrame: DataFrame containing the table data.
+        pandas.DataFrame: 
+            A DataFrame containing the data from the specified table, 
+            or None if an error occurs.
+    Raises:
+        Exception: 
+            If there is an issue with the database query or connection, 
+            an exception is caught and an error message is printed.
     """
     try:
         # Query the table
@@ -35,7 +56,42 @@ def extract_table_to_dataframe(con, table_name):
         print(f"Error extracting table {table_name}: {e}")
         return None
 
-def extract_excel_to_dataframe(input_dir, table):
+def extract_excel_to_dataframe(input_dir: str, table: str) -> pd.DataFrame:
+    """
+    Extract data from Excel files into a pandas DataFrame based on the specified table type.
+    This function processes various Excel files and sheets, extracting and transforming data 
+    into pandas DataFrames according to the provided `table` parameter. The function supports 
+    multiple table types, each corresponding to a specific data extraction and transformation logic.
+    Parameters:
+        input_dir (str): The directory containing the input Excel files.
+        table (str): The type of table to extract. Supported values are:
+            - "i": Extracts data from "Power_BusInfo.xlsx" (sheet "Power BusInfo").
+            - "rp": Extracts unique values from "results.xlsx" (sheet "TotalEnrp").
+            - "k": Extracts unique values from "results.xlsx" (sheet "TotalEnrp").
+            - "gi": Combines data from multiple Excel files ("Power_VRES", "Power_ThermalGen", 
+              "Power_Storage", "Power_RoR") into a DataFrame with columns "g" and "i".
+            - "vLineP": Processes line data from "results.xlsx" (sheet "pLineP") and returns 
+              two DataFrames: one for the main data and one for line tuples.
+            - "coords": Extracts coordinates (longitude and latitude) from "Power_BusInfo.xlsx" 
+              (sheet "Power BusInfo").
+            - "vGenP": Processes generator data from "results.xlsx" (sheet "GenP") into a long-format DataFrame.
+            - "pPmax": Extracts power network data from "Power_Network.xlsx" (sheet "Power Network").
+            - "pDemand": Placeholder for future implementation.
+    Returns:
+        pandas.DataFrame or tuple: 
+            - For most table types, returns a single DataFrame containing the extracted data.
+            - For "vLineP", returns a tuple of two DataFrames: (main data, line tuples).
+            - For "gi", returns a tuple of two DataFrames: (main data, unique "g" values).
+            - Returns None if the table type is invalid or not yet implemented.
+    Notes:
+        - The function uses hardcoded file and sheet names for specific table types.
+        - Some table types include additional preprocessing steps, such as removing duplicates 
+          or resetting the index.
+        - For "vLineP" and "vGenP", the function includes performance timing for processing.
+    Raises:
+        FileNotFoundError: If the specified Excel files or sheets are not found.
+        ValueError: If the table type is invalid or not supported.
+    """
 
     if table == "i":
         filename = os.path.join(input_dir, "Power_BusInfo.xlsx")
@@ -213,16 +269,22 @@ def extract_excel_to_dataframe(input_dir, table):
     else:
         return df 
 
-def copy_default_config(config_path="config.yml", default_config_path="config_template.yml"):
+def copy_default_config(config_path: str="config.yml", default_config_path: str="config_template.yml") -> None:
     """
-    Copies the default configuration file to the specified path.
-
-    Parameters:
-        config_path (str): Path where the configuration file will be copied.
-        default_config_path (str): Path of the default configuration file.
-
-    Returns:
-        None
+    Copies a default configuration file to a specified path if it does not already exist.
+    Args:
+        config_path (str): The path where the configuration file should be created. 
+                           Defaults to "config.yml".
+        default_config_path (str): The path to the default configuration template file. 
+                                   Defaults to "config_template.yml".
+    Behavior:
+        - If the file at `config_path` does not exist, the function reads the content of 
+          `default_config_path` and writes it to `config_path`.
+        - If the file at `config_path` already exists, no action is taken, and a message 
+          is printed to indicate this.
+    Prints:
+        - A message indicating that the default configuration has been copied, or that 
+          the configuration file already exists.
     """
     if not os.path.exists(config_path):
         with open(default_config_path, 'r') as f:
@@ -234,7 +296,21 @@ def copy_default_config(config_path="config.yml", default_config_path="config_te
     else:
         print(f"Configuration file already exists at {config_path}.")
 
-def load_config(config_path="config.yml"):
+def load_config(config_path: str="config.yml") -> dict:
+    """
+    Loads a YAML configuration file and returns its contents as a dictionary.
+
+    Args:
+        config_path (str): The path to the YAML configuration file. 
+                           Defaults to "config.yml".
+
+    Returns:
+        dict: The contents of the YAML configuration file as a dictionary.
+
+    Raises:
+        FileNotFoundError: If the specified configuration file does not exist.
+        yaml.YAMLError: If there is an error parsing the YAML file.
+    """
     with open(config_path, 'r') as f:
         config = yaml.safe_load(f)
     return config

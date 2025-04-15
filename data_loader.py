@@ -1,4 +1,40 @@
-def load_data(obj, ):
+def get_data(obj, ):
+    """
+    Load and process data from various input sources (SQLite, Excel, or V2G) into the object's attributes.
+    This function handles data extraction, transformation, and loading based on the specified input type.
+    It supports SQLite databases, Excel files, and V2G-specific formats. The processed data is stored
+    as attributes of the provided object (`obj`).
+    Args:
+        obj: An object with the following attributes:
+            - input_type (str): The type of input data. Must be one of "sqlite", "excel", or "V2G".
+            - input_dir (str): The directory containing the input files or database.
+            - tables (list): A list of table names to load and process.
+    Raises:
+        ValueError: If the `input_type` is not one of "sqlite", "excel", or "V2G".
+    Notes:
+        - For SQLite input, the function connects to a SQLite database and extracts tables into pandas DataFrames.
+        - For Excel input, the function reads tables from Excel files and processes them accordingly.
+        - For V2G input, the function processes data specific to the V2G format, including handling duplicate lines
+            and calculating relative values.
+    Attributes Set on `obj`:
+        - Various attributes corresponding to the loaded tables (e.g., `vLineP`, `pPmax`, `coords`, etc.).
+        - `coords`: A DataFrame containing latitude and longitude information.
+        - `bounds`: A list of coordinate bounds for map display.
+        - `vLineP_max`: The maximum value in the `vLineP` DataFrame.
+        - `vLineP_min`: The minimum value in the `vLineP` DataFrame.
+    Processing Details:
+        - Renames columns and drops unnecessary ones for consistency.
+        - Handles duplicate entries in `vLineP` and adjusts flow values accordingly.
+        - Computes relative values (`rel_values`) for `vLineP` based on `pPmax`.
+        - Merges coordinate data into the `i` DataFrame.
+        - Computes bounds for map display based on latitude and longitude.
+    Example Usage:
+        obj = SomeClass()
+        obj.input_type = "sqlite"
+        obj.input_dir = "/path/to/data"
+        obj.tables = ["vLineP", "pPmax", "coords"]
+        get_data(obj)
+    """
     import os
     import sqlite3
     import pandas as pd

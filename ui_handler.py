@@ -7,7 +7,38 @@ import plotly.express as px
 import random
 from dash import html, dcc
 
-def generate_network_map(vLineP, buses, selected_period, selected_time, long_format, zoom_level, map_options):
+def generate_network_map(vLineP: pd.DataFrame, buses:pd.DataFrame, selected_period: str, selected_time: int, long_format: bool, zoom_level: int, map_options: dict) -> list:
+    """
+    Generates a network map visualization using power flow data and bus locations.
+    Args:
+        vLineP (pd.DataFrame): DataFrame containing power flow data with columns:
+            - "i": Starting bus ID of the line.
+            - "j": Ending bus ID of the line.
+            - "values": Power flow values.
+            - "rel_values": Relative power flow values (used for color mapping).
+            - "line": Line IDs.
+            - "k": Time step identifier.
+            - "rp": Period identifier.
+            - "pPmax": Line rating (maximum power capacity).
+        buses (pd.DataFrame): DataFrame containing bus location data with columns:
+            - "lat": Latitude of the bus.
+            - "lon": Longitude of the bus.
+        selected_period (str): The selected period identifier for filtering the data.
+        selected_time (int): The selected time step identifier for filtering the data.
+        long_format (bool): Whether the data is in long format (only filter by time) or not.
+        zoom_level (int): The current zoom level of the map.
+        map_options (dict): Dictionary containing map configuration options:
+            - "line_weight": Line thickness for the polylines.
+            - "arrow_zoom_scale": Scaling factor for arrow sizes based on zoom level.
+            - "arrow_min_size": Minimum size for arrows.
+            - "node_zoom_scale": Scaling factor for node sizes based on zoom level.
+            - "node_min_size": Minimum size for nodes.
+            - "default_zoom": Default zoom level if none is provided.
+    Returns:
+        list: A list of Dash Leaflet components representing the network map, including:
+            - A tile layer for the map background.
+            - A layer group containing arrows (power flow directions) and circles (bus nodes).
+    """
     selected_time = f"k{selected_time:04d}"
     # Use config values
     line_weight = map_options["line_weight"]
@@ -83,9 +114,32 @@ def generate_network_map(vLineP, buses, selected_period, selected_time, long_for
 
     return [tile_layer, dl.LayerGroup(children=arrows + circles, id="network-layer" + str(random.randint(0, 1000)))]
 
-def filter_dataframe(self, attr_str: str, rp: str, scope: str, local_node: str = None, local_line: str = None, k_range: list = []) -> pd.DataFrame:
-    """Filter a stored dataframe based on reporting period, time, and scope."""
-    
+def filter_dataframe(self, attr_str: str, rp: str, scope: str, local_node: str=None, local_line: str=None, k_range: list=[]) -> pd.DataFrame:
+    """
+    Filters a DataFrame based on the provided attributes, scope, and conditions.
+    Args:
+        attr_str (str): The attribute string specifying which DataFrame to filter.
+                        Options include "vGenP", "pDemandP", and "vLineP".
+        rp (str): The reporting period to filter by, applicable when `long_format` is False.
+        scope (str): The scope of filtering. Options include "Local" and "Global".
+                    - "Local": Filters data specific to a local node or line.
+                    - "Global": Aggregates data globally (only applicable for "pDemandP").
+        local_node (str, optional): The local node identifier for filtering when `scope` is "Local".
+                                    Defaults to None.
+        local_line (str, optional): The local line identifier for filtering when `scope` is "Local".
+                                    Defaults to None.
+        k_range (list, optional): A list of `k` values to filter the DataFrame by. Defaults to an empty list.
+    Returns:
+        pd.DataFrame: The filtered DataFrame based on the specified conditions.
+                    Returns None if the specified DataFrame is not available.
+    Notes:
+        - The method operates on different DataFrames (`vGenP`, `pDemandP`, `vLineP`) based on `attr_str`.
+        - If `long_format` is False, the DataFrame is filtered by the reporting period (`rp`).
+        - For "pDemandP" with "Global" scope, the data is aggregated by summing over `k` values.
+        - For "vGenP" with "Local" scope, filtering is based on the local node's group (`g`).
+        - For "vLineP" with "Local" scope, filtering is based on the local line identifier.
+    """
+   
     df = None
 
     if attr_str == "vGenP":
@@ -126,7 +180,27 @@ def filter_dataframe(self, attr_str: str, rp: str, scope: str, local_node: str =
 
     return df
 
-def generate_dynamic_plot(self, x_axis, y_axis, line_idx, node_idx, selected_period, scope, time_range):
+def generate_dynamic_plot(self, x_axis: str, y_axis: str, line_idx: str, node_idx: str, selected_period: str, scope: str, time_range: list) -> html.Div:
+    """
+    Generates a dynamic plot based on the provided parameters.
+    Parameters:
+        x_axis (str): The variable to be used for the x-axis. Options include "time", "generator", or "line".
+        y_axis (str): The variable to be used for the y-axis. Options include "demand", "dispatch", or "power_flow".
+        line_idx (str): The str(index) of the line to be used for local power flow plots.
+        node_idx (str): The index (str) of the node to be used for local dispatch or demand plots.
+        selected_period (str): The selected period for filtering the data.
+        scope (str): The scope of the plot, either "Global" or "Local".
+        time_range (list): A 2-element list specifying the range of time steps [start, end] for the plot.
+    Returns:
+        html.Div: A Dash HTML Div containing the generated plot as a dcc.Graph component.
+    Notes:
+        - The function dynamically filters the data based on the provided parameters and generates a plot using Plotly.
+        - The plot type and configuration depend on the combination of x_axis and y_axis values.
+        - If the combination of x_axis and y_axis is invalid, a placeholder scatter plot is generated.
+        - The layout of the plot is customized with specific margins, background colors, and font sizes.
+    """
+
+
     print(f"Updating plot: x_axis={x_axis}, y_axis={y_axis}, selected_period={selected_period}, selected_time_range={time_range}, local_node={node_idx}, local_line={line_idx}, scope={scope}")
     
     fig = None

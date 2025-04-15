@@ -4,15 +4,67 @@ import dash_leaflet as dl
 import numpy as np
 import os
 import helper_functions as h
-from data_loader import load_data
+from data_loader import get_data
 from ui_handler import generate_network_map, generate_dynamic_plot
 import sys
 
 class LegoGPT:
-    """ Class to visualize LEGO results. """
+    """
+    This class is designed to create an interactive Dash web application for visualizing and analyzing network data 
+    from LEGO results files. It provides a user-friendly interface with dropdowns, sliders, and interactive maps 
+    to explore the data.
+
+    Attributes:
+        input_dir (str): Directory containing input data files.
+        input_type (str): Type of input data ('excel', 'sqlite', or 'V2G').
+        tables (list): List containing tables to be loaded from the input data.
+        dropdown_options_y (list): Options for the Y-axis dropdown.
+        dropdown_options_x (list): Options for the X-axis dropdown.
+        map_options (dict): Configuration options for the map.
+        app (dash.Dash): Dash application instance.
+        long_format (bool): Flag indicating whether the data is in long format.
+        bounds (list): Map bounds for visualization.
+    Methods:
+        __init__(config_path: str = None):
+            Initializes the LegoGPT class by loading configuration, validating input, and setting up the app.
+        load_data():
+            Loads network data from the LEGO results file.
+        create_app():
+            Initializes the Dash application.
+        setup_layout():
+            Defines the layout of the Dash application, including controls, map, and graph sections.
+        setup_callbacks():
+            Defines the callbacks for interactivity in the Dash application, such as updating the map, syncing sliders, 
+            and generating dynamic plots.
+        run():
+            Starts the Dash server to host the application.
+    """
 
     def __init__(self, config_path: str = None):
-        """ Initialize the class. """
+        """
+        Initialize the class.
+
+        This method sets up the class by loading the configuration, validating input types,
+        checking for required tables, and initializing the application components.
+
+        Args:
+            config_path (str, optional): Path to the configuration file. If not provided,
+                                         the default "config.yml" in the current directory is used.
+
+        Raises:
+            ValueError: If the input type is not one of "excel", "sqlite", or "V2G".
+            ValueError: If any of the required tables ("i", "la", "vLineP", "pPmax", "k") 
+                        are missing from the configuration.
+
+        Attributes:
+            input_dir (str): Directory for input files as specified in the configuration.
+            input_type (str): Type of input data ("excel", "sqlite", or "V2G").
+            tables (dict): Dictionary of tables loaded from the configuration.
+            dropdown_options_y (list): Dropdown options for the Y-axis.
+            dropdown_options_x (list): Dropdown options for the X-axis.
+            map_options (dict): Mapping options from the configuration.
+        """
+
 
         # Load configuration from this directory or from the provided path
         config = h.load_config("config.yml") if config_path is None else h.load_config(config_path)
@@ -38,15 +90,66 @@ class LegoGPT:
         self.setup_callbacks()  # Define callbacks
      
     def load_data(self, ):
-        """ Load network data from LEGO results file. """
-        load_data(self)
+        """
+        Loads the necessary data for the application.
+
+        This method is intended to handle the data loading process. 
+        Ensure that the required data sources are accessible and properly formatted.
+        """
+        get_data(self)
         
     def create_app(self):
-        """ Initialize Dash app. """
+        """
+        Creates and initializes a Dash application instance.
+
+        This method sets up a Dash application with specific configurations:
+        - `suppress_callback_exceptions`: Allows callbacks to be defined even if their
+          corresponding components are not present in the initial layout.
+        - `prevent_initial_callbacks`: Disables the automatic triggering of callbacks
+          when the app is first loaded.
+
+        Returns:
+            None
+        """
         self.app = dash.Dash(__name__, suppress_callback_exceptions=True, prevent_initial_callbacks=False)
 
     def setup_layout(self):
-        """ Define app layout. """
+        """
+        Sets up the layout for the Dash application.
+        This method defines the structure and components of the application's user interface, 
+        including dropdowns, sliders, buttons, and visualizations such as maps and graphs. 
+        The layout dynamically adjusts based on the data and configuration provided.
+        Key Features:
+        - Dropdowns for selecting reporting periods, X-axis, and Y-axis options.
+        - A slider for selecting time periods, with an optional number input for precise selection.
+        - A range slider for selecting a range of time periods when in long format.
+        - A map visualization on the left side, displaying network data.
+        - A dynamic graph on the right side, which updates based on user interactions.
+        Components:
+        - Reporting Period Dropdown: Allows selection of a specific reporting period.
+        - Time Slider: Enables navigation through time periods.
+        - Time Slider Input: Provides precise input for time periods (visible in long format).
+        - Axis Dropdowns: Allows selection of X-axis and Y-axis variables for the graph.
+        - Local Button: A button for toggling scope or triggering specific actions.
+        - Range Slider: Allows selection of a range of time periods (visible in long format).
+        - Map: Displays a network visualization with tile layers and markers.
+        - Graph: Displays dynamic plots based on selected data.
+        Stores:
+        - `last-clicked-line`: Stores the index of the last clicked line.
+        - `last-clicked-node`: Stores the index of the last clicked node.
+        - `map-zoom`: Stores the default zoom level for the map.
+        Layout Structure:
+        - Top Row: Contains global controls such as dropdowns, sliders, and buttons.
+        - Main Section: Divided into two parts:
+            - Left: Map visualization.
+            - Right: Dynamic graph visualization.
+        Styling:
+        - The layout is styled for responsiveness, with flexible widths and heights.
+        - Components are aligned and spaced for a clean and user-friendly interface.
+        Note:
+        - The layout adapts based on the `long_format` flag, which determines the visibility 
+          of certain components and the configuration of sliders.
+        """
 
         self.long_format = True if "rp" not in self.tables or (len(self.rp) == 1 and len(self.k) > 24) else False
         display_time_range = 'block' if self.long_format else 'none'
@@ -194,7 +297,7 @@ class LegoGPT:
                 'flex-wrap': 'wrap'
             }),
 
-            dcc.Store(id="last-clicked-line", data=self.la.index[0]),
+            dcc.Store(id="last-clicked-line", data=str(self.la.index[0])),
             dcc.Store(id="last-clicked-node", data=self.i.index[0]),
             dcc.Store(id="map-zoom", data=self.map_options["default_zoom"]),  # Default zoom
 
@@ -219,7 +322,44 @@ class LegoGPT:
         ], style={"background-color": "#6BA3A3", "padding": "10px"})
 
     def setup_callbacks(self):
-        """ Define callbacks for interactivity. """
+        """
+        Sets up all the Dash callbacks for the application.
+        This method defines multiple callbacks to handle user interactions and update
+        the application state dynamically. The callbacks include:
+        1. `update_network`: Updates the network map based on the selected period, 
+            time, and zoom level.
+            - Outputs: Updates the "children" property of the "network-map" component.
+            - Inputs: "rep-period-dropdown" value, "time-slider" value, and "map-zoom" data.
+        2. `store_last_clicked_line`: Stores the ID of the last clicked line.
+            - Outputs: Updates the "data" property of the "last-clicked-line" component.
+            - Inputs: Click events for each line in the dataset.
+        3. `store_last_clicked_node`: Stores the ID of the last clicked node.
+            - Outputs: Updates the "data" property of the "last-clicked-node" component.
+            - Inputs: Click events for each node in the dataset.
+        4. `sync_slider_and_input`: Synchronizes the values of the time slider and its 
+            corresponding input field.
+            - Outputs: Updates the "value" properties of both the "time-slider" and 
+              "time-slider-input" components.
+            - Inputs: "time-slider" value and "time-slider-input" value.
+        5. `toggle_button_label`: Toggles the label of the "local-button" between 
+            "Local" and "Global" based on the number of clicks.
+            - Outputs: Updates the "children" property of the "local-button" component.
+            - Inputs: Click events on the "local-button".
+        6. `store_map_zoom`: Stores the current zoom level of the network map.
+            - Outputs: Updates the "data" property of the "map-zoom" component.
+            - Inputs: "zoom" property of the "network-map" component.
+        7. `update_dynamic_plot`: Updates the dynamic plot based on various user 
+            inputs, including axis selections, clicked line or node, selected period, 
+            scope, and time range.
+            - Outputs: Updates the "children" property of the "dynamic-plot-container" 
+              component.
+            - Inputs: "x-axis-dropdown" value, "y-axis-dropdown" value, 
+              "last-clicked-line" data, "last-clicked-node" data, 
+              "rep-period-dropdown" value, "local-button" children, and 
+              "time-slider-range" value.
+        Each callback is designed to handle specific interactions and ensure the 
+        application responds dynamically to user inputs.
+        """
 
         @self.app.callback(
             Output("network-map", "children"),  
@@ -320,7 +460,15 @@ class LegoGPT:
             )
     
     def run(self):
-        """ Start the Dash server. """
+        """
+        Starts the application by running the Flask development server.
+
+        This method initializes and runs the Flask application with debugging
+        disabled for production use.
+
+        Returns:
+            None
+        """
         self.app.run(debug=False)
 
 if __name__ == "__main__":
