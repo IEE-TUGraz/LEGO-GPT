@@ -62,9 +62,12 @@ def extract_excel_to_dataframe(input_dir: str, table: str) -> pd.DataFrame:
     This function processes various Excel files and sheets, extracting and transforming data 
     into pandas DataFrames according to the provided `table` parameter. The function supports 
     multiple table types, each corresponding to a specific data extraction and transformation logic.
+
     Parameters:
+
         input_dir (str): The directory containing the input Excel files.
         table (str): The type of table to extract. Supported values are:
+        
             - "i": Extracts data from "Power_BusInfo.xlsx" (sheet "Power BusInfo").
             - "rp": Extracts unique values from "results.xlsx" (sheet "TotalEnrp").
             - "k": Extracts unique values from "results.xlsx" (sheet "TotalEnrp").
@@ -77,20 +80,25 @@ def extract_excel_to_dataframe(input_dir: str, table: str) -> pd.DataFrame:
             - "vGenP": Processes generator data from "results.xlsx" (sheet "GenP") into a long-format DataFrame.
             - "pPmax": Extracts power network data from "Power_Network.xlsx" (sheet "Power Network").
             - "pDemand": Placeholder for future implementation.
+
     Returns:
+
         pandas.DataFrame or tuple: 
             - For most table types, returns a single DataFrame containing the extracted data.
             - For "vLineP", returns a tuple of two DataFrames: (main data, line tuples).
             - For "gi", returns a tuple of two DataFrames: (main data, unique "g" values).
             - Returns None if the table type is invalid or not yet implemented.
-    Notes:
+    Note:
+    
         - The function uses hardcoded file and sheet names for specific table types.
         - Some table types include additional preprocessing steps, such as removing duplicates 
           or resetting the index.
         - For "vLineP" and "vGenP", the function includes performance timing for processing.
+
     Raises:
         FileNotFoundError: If the specified Excel files or sheets are not found.
         ValueError: If the table type is invalid or not supported.
+        
     """
 
     if table == "i":

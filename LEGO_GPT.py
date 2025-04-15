@@ -116,10 +116,8 @@ class LEGO_GPT:
         Creates and initializes a Dash application instance.
 
         This method sets up a Dash application with specific configurations:
-        - `suppress_callback_exceptions`: Allows callbacks to be defined even if their
-          corresponding components are not present in the initial layout.
-        - `prevent_initial_callbacks`: Disables the automatic triggering of callbacks
-          when the app is first loaded.
+            - `suppress_callback_exceptions`: Allows callbacks to be defined even if their corresponding components are not present in the initial layout.
+            - `prevent_initial_callbacks`: Disables the automatic triggering of callbacks when the app is first loaded.
 
         Returns:
             None
@@ -166,8 +164,8 @@ class LEGO_GPT:
             - Components are aligned and spaced for a clean and user-friendly interface.
 
         Note:
-            - The layout adapts based on the `long_format` flag, which determines the visibility 
-            of certain components and the configuration of sliders.
+            - The layout adapts based on the `long_format` flag, which determines the visibility of certain components and the configuration of sliders.
+
         """
 
         self.long_format = True if "rp" not in self.tables or (len(self.rp) == 1 and len(self.k) > 24) else False
@@ -374,6 +372,7 @@ class LEGO_GPT:
               "last-clicked-line" data, "last-clicked-node" data, 
               "rep-period-dropdown" value, "local-button" children, and 
               "time-slider-range" value.
+
         Each callback is designed to handle specific interactions and ensure the 
         application responds dynamically to user inputs.
         """
