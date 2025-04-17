@@ -103,27 +103,79 @@ def get_data(obj, ):
         self.coords = h.load_lat_lon(self.input_dir)
         
     elif self.input_type == "excel":
-        for table in self.tables:
-            print(f"Loading table {table}...")
-            if table == "vLineP":
-                df, df_lines = h.extract_excel_to_dataframe(self.input_dir, table)
-                self.vLineP = df
-                self.la = df_lines
-            elif table == "gi":
-                df, df_g = h.extract_excel_to_dataframe(self.input_dir, table)
-                self.gi = df
-                self.g = df_g
-            elif table == "la" or table == "g": # get from other dataframe
-                continue
-            else:
-                # load the data as variable with the table name
-                setattr(self, table, h.extract_excel_to_dataframe(self.input_dir, table))
-        self.coords = h.extract_excel_to_dataframe(self.input_dir, "coords")
+        fast=False
+        if not fast:
+            for table in self.tables:
+                print(f"Loading table {table}...")
+                if table == "vLineP":
+                    df, df_lines = h.extract_excel_to_dataframe(self.input_dir, table)
+                    self.vLineP = df
+                    self.la = df_lines
+                elif table == "gi":
+                    df, df_g = h.extract_excel_to_dataframe(self.input_dir, table)
+                    self.gi = df
+                    self.g = df_g
+                elif table == "la" or table == "g": # get from other dataframe
+                    continue
+                else:
+                    # load the data as variable with the table name
+                    setattr(self, table, h.extract_excel_to_dataframe(self.input_dir, table))
+            self.coords = h.extract_excel_to_dataframe(self.input_dir, "coords")
 
-        # only take values where duplicate is False
-        self.vLineP = self.vLineP[self.vLineP["duplicate"] == False].copy()
-        # drop duplicate column
-        self.vLineP.drop(columns=["duplicate"], inplace=True)
+
+            # only take values where duplicate is False
+            self.vLineP = self.vLineP[self.vLineP["duplicate"] == False].copy()
+            # drop duplicate column
+            self.vLineP.drop(columns=["duplicate"], inplace=True)
+
+            # save all the modified tables to a sqlite database
+            # create a new database
+            conn = sqlite3.connect(os.path.join(self.input_dir, "test_data.sqlite"))
+            # save all the tables to the database
+            for table in self.tables:
+                if table == "vLineP":
+                    self.vLineP.to_sql(table, conn, if_exists="replace", index=False)
+                elif table == "la":
+                    self.la.to_sql(table, conn, if_exists="replace", index=False)
+                elif table == "i":
+                    self.i.to_sql(table, conn, if_exists="replace", index=False)
+                elif table == "pPmax":
+                    self.pPmax.to_sql(table, conn, if_exists="replace", index=False)
+                elif table == "k":
+                    self.k.to_sql(table, conn, if_exists="replace", index=False) 
+                elif table == "g":
+                    self.g.to_sql(table, conn, if_exists="replace", index=False)
+                elif table == "gi":
+                    self.gi.to_sql(table, conn, if_exists="replace", index=False)
+                elif table == "rp":
+                    self.rp.to_sql(table, conn, if_exists="replace", index=False)
+                elif table == "coords":
+                    # save the coords dataframe to the database
+                    self.coords.to_sql(table, conn, if_exists="replace", index=False)
+                elif table == "vGenP":
+                    # save the vGenP dataframe to the database
+                    self.vGenP.to_sql(table, conn, if_exists="replace", index=False)
+                elif table == "pDemandP":
+                    # save the pDemandP dataframe to the database
+                    self.pDemandP.to_sql(table, conn, if_exists="replace", index=False)
+                # elif table == "vStIntraRes":
+                #     # save the vStIntraRes dataframe to the database
+                #     self.vStIntraRes.to_sql(table, conn, if_exists="replace", index=False)
+                # elif table == "vStInterRes":
+                #     # save the vStInterRes dataframe to the database
+                #     self.vStInterRes.to_sql(table, conn, if_exists="replace", index=False)
+
+            self.coords.to_sql("coords", conn, if_exists="replace", index=False)    
+        else:
+            # load from the database
+            # connect to the database
+            conn = sqlite3.connect(os.path.join(self.input_dir, "test_data.sqlite"))
+            for table in self.tables:
+                # load the data as variable with the table name
+                setattr(self, table, h.extract_table_to_dataframe(conn, table)) 
+            self.coords = h.extract_excel_to_dataframe(self.input_dir, "coords")
+
+
 
     elif self.input_type == "V2G":
 
