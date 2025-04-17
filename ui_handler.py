@@ -6,6 +6,9 @@ import random
 import plotly.express as px
 import random
 from dash import html, dcc
+import dash_leaflet.express as dlx
+from dash_extensions.javascript import assign
+import math
 
 def generate_network_map(vLineP: pd.DataFrame, buses:pd.DataFrame, selected_period: str, selected_time: int, long_format: bool, zoom_level: int, map_options: dict) -> list:
     """
@@ -117,8 +120,13 @@ def generate_network_map(vLineP: pd.DataFrame, buses:pd.DataFrame, selected_peri
     ]
 
     tile_layer = dl.TileLayer(url='https://tile.jawg.io/jawg-light/{z}/{x}/{y}{r}.png?access-token=K29acH6XcPPrHIAdDENjCaooa47B7CDZieD4CPBI2EiVrg8iKRjqiS80D8ACx9Np')
+    node_layer = generate_node_layer(buses)
 
-    return [tile_layer, dl.LayerGroup(children=arrows + circles, id="network-layer" + str(random.randint(0, 1000)))]
+
+
+    #return [tile_layer, dl.LayerGroup(children=arrows + circles, id="network-layer" + str(random.randint(0, 1000)))]
+    return [tile_layer, dl.LayerGroup(children=arrows, id="network-layer" + str(random.randint(0, 1000))), node_layer]
+
 
 def filter_dataframe(self, attr_str: str, rp: str, scope: str, local_node: str=None, local_line: str=None, k_range: list=[]) -> pd.DataFrame:
     """
@@ -272,3 +280,193 @@ def generate_dynamic_plot(self, x_axis: str, y_axis: str, line_idx: str, node_id
 
     return html.Div([dcc.Graph(figure=fig, id="dynamic-plot" + str(random.randint(0, 1000)), style={'height': '100%', 'width': '100%'})],
                     style={'flex': '1', 'min-width': '0', 'height': '90vh', 'margin-top': '0px'})
+
+def generate_node_layer(buses: pd.DataFrame) -> dl.GeoJSON:
+    # ---------------------------------------
+    # Create sample data (replace with real later)
+    # ---------------------------------------
+    def create_sample_data(buses):
+        return [
+            dict(
+                id=f"site_{i}",
+                lat=bus.lat,
+                lon=bus.lon,
+                name=f"Site {i}",
+                cat1=i % 3 + 1,
+                cat2=i % 5 + 1,
+                cat3=i % 7 + 1,
+            )
+            for i, bus in enumerate(buses.itertuples(index=True))
+        ]
+
+    # Create data
+    raw_data = create_sample_data(buses)
+    geojson = dlx.dicts_to_geojson(raw_data)
+    geobuf = dlx.geojson_to_geobuf(geojson)
+
+    # ---------------------------------------
+    # Precompute size scaling
+    # ---------------------------------------
+    min_radius = 6
+    max_radius =18
+    max_total = max(d["cat1"] + d["cat2"] + d["cat3"] for d in raw_data)
+    sqrt_max = math.sqrt(max_total)
+    scale_factor = (max_radius - min_radius) / sqrt_max
+
+    # ---------------------------------------
+    # SVG pie chart function (JS)
+    # ---------------------------------------
+    pie_svg_js = """
+    function pieSVG(opt) {
+    function getCoords(cx, cy, radius, angle) {
+        const rad = (angle - 90) * Math.PI / 180;
+        return {
+        x: cx + radius * Math.cos(rad),
+        y: cy + radius * Math.sin(rad)
+        };
+    }
+
+    function describeSlice(cx, cy, r, startAngle, endAngle) {
+        const start = getCoords(cx, cy, r, startAngle);
+        const end = getCoords(cx, cy, r, endAngle);
+        const largeArc = (endAngle - startAngle) > 180 ? 1 : 0;
+
+        return [
+        "M", cx, cy,
+        "L", start.x, start.y,
+        "A", r, r, 0, largeArc, 1, end.x, end.y,
+        "Z"
+        ].join(" ");
+    }
+
+    opt = Object.assign({
+        width: 60,
+        height: 60,
+        radius: 20,
+        fontSize: 14,
+        text: '',
+        values: [10, 10, 10],
+        colors: ['green', 'orange', 'red']
+    }, opt);
+
+    const sum = opt.values.reduce((a, b) => a + b, 0);
+    let startAngle = 0;
+    let paths = '';
+
+    for (let i = 0; i < opt.values.length; i++) {
+        const sliceAngle = (opt.values[i] / sum) * 360;
+        const endAngle = startAngle + sliceAngle;
+        const d = describeSlice(opt.width/2, opt.height/2, opt.radius, startAngle, endAngle);
+        paths += `<path fill="${opt.colors[i]}" d="${d}"></path>`;
+        startAngle = endAngle;
+    }
+
+    return `<svg width="${opt.width}" height="${opt.height}">
+                ${paths}
+            </svg>`;
+    }
+    """
+
+    # ---------------------------------------
+    # Individual node marker
+    # ---------------------------------------
+    point_to_layer = assign(f"""function(feature, latlng) {{
+        {pie_svg_js}
+
+        const cat1 = feature.properties.cat1;
+        const cat2 = feature.properties.cat2;
+        const cat3 = feature.properties.cat3;
+        const total = cat1 + cat2 + cat3;
+
+        const radius = {min_radius} + Math.sqrt(total) * {scale_factor:.6f};
+        const scale = radius * 2.5;
+
+        const icon = L.divIcon({{
+            html: pieSVG({{
+                values: [cat1, cat2, cat3],
+                colors: ['green', 'orange', 'red'],
+                width: scale,
+                height: scale,
+                radius: radius,
+                fontSize: 10
+            }}),
+            className: "custom-marker",
+            iconSize: L.point(scale, scale),
+            iconAnchor: [scale / 2, scale / 2]
+        }});
+
+        const marker = L.marker(latlng, {{ icon: icon }});
+        marker.bindTooltip(
+            `<b>${{feature.properties.name}}</b><br/>
+             Cat1: ${{cat1}}<br/>
+             Cat2: ${{cat2}}<br/>
+             Cat3: ${{cat3}}`,
+            {{
+                direction: 'top',
+                offset: [0, -scale / 2],
+                opacity: 0.9
+            }}
+        );
+        return marker;
+    }}""")
+
+    # ---------------------------------------
+    # Clustered marker
+    # ---------------------------------------
+    cluster_to_layer = assign(f"""function(feature, latlng, index, context) {{
+        {pie_svg_js}
+
+        const leaves = index.getLeaves(feature.properties.cluster_id, Infinity);
+        let total1 = 0, total2 = 0, total3 = 0;
+        for (let i = 0; i < leaves.length; ++i) {{
+            total1 += leaves[i].properties.cat1;
+            total2 += leaves[i].properties.cat2;
+            total3 += leaves[i].properties.cat3;
+        }}
+
+        const total = total1 + total2 + total3;
+        const radius = {min_radius} + Math.sqrt(total) * {scale_factor:.6f};
+        const scale = radius * 2.5;
+
+        const icon = L.divIcon({{
+            html: pieSVG({{
+                values: [total1, total2, total3],
+                colors: ['green', 'orange', 'red'],
+                width: scale,
+                height: scale,
+                radius: radius,
+                fontSize: 12
+            }}),
+            className: "marker-cluster",
+            iconSize: L.point(scale, scale),
+            iconAnchor: [scale / 2, scale / 2]
+        }});
+
+        const marker = L.marker(latlng, {{ icon: icon }});
+        marker.bindTooltip(
+            `Cluster of ${{leaves.length}} Sites<br/>
+             Total Cat1: ${{total1}}<br/>
+             Total Cat2: ${{total2}}<br/>
+             Total Cat3: ${{total3}}`,
+            {{
+                direction: 'top',
+                offset: [0, -scale / 2],
+                opacity: 0.9
+            }}
+        );
+
+        return marker;
+    }}""")
+
+    # ---------------------------------------
+    # Return GeoJSON layer
+    # ---------------------------------------
+    return dl.GeoJSON(
+        data=geobuf,
+        format='geobuf',
+        cluster=True,
+        zoomToBoundsOnClick=True,
+        superClusterOptions=dict(radius=40, maxZoom=16),
+        pointToLayer=point_to_layer,
+        clusterToLayer=cluster_to_layer
+    )
