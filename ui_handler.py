@@ -10,6 +10,175 @@ import dash_leaflet.express as dlx
 from dash_extensions.javascript import assign
 import math
 
+scale_factor = 0.03
+min_radius = 8
+max_radius = 16
+# ---------------------------------------
+# Pie SVG JS
+# ---------------------------------------
+pie_svg_js = """
+function pieSVG(opt) {
+    function getCoords(cx, cy, radius, angle) {
+        const rad = (angle - 90) * Math.PI / 180;
+        return {
+            x: cx + radius * Math.cos(rad),
+            y: cy + radius * Math.sin(rad)
+        };
+    }
+
+    function describeSlice(cx, cy, r, startAngle, endAngle) {
+        const start = getCoords(cx, cy, r, startAngle);
+        const end = getCoords(cx, cy, r, endAngle);
+        const largeArc = (endAngle - startAngle) > 180 ? 1 : 0;
+
+        return [
+            "M", cx, cy,
+            "L", start.x, start.y,
+            "A", r, r, 0, largeArc, 1, end.x, end.y,
+            "Z"
+        ].join(" ");
+    }
+
+    opt = Object.assign({
+        width: 60,
+        height: 60,
+        radius: 20,
+        fontSize: 14,
+        values: [10, 10, 10],
+        colors: ['green', 'orange', 'red']
+    }, opt);
+
+    const sum = opt.values.reduce((a, b) => a + b, 0);
+    let startAngle = 0;
+    let paths = '';
+
+    for (let i = 0; i < opt.values.length; i++) {
+        const sliceAngle = (opt.values[i] / sum) * 360;
+        const endAngle = startAngle + sliceAngle;
+        const d = describeSlice(opt.width/2, opt.height/2, opt.radius, startAngle, endAngle);
+        paths += `<path fill="${opt.colors[i]}" d="${d}"></path>`;
+        startAngle = endAngle;
+    }
+
+    return `<svg width="${opt.width}" height="${opt.height}">${paths}</svg>`;
+}
+"""
+
+# ---------------------------------------
+# Point markers
+# ---------------------------------------
+point_to_layer = assign(f"""function(feature, latlng) {{
+    {pie_svg_js}
+
+    const values = feature.properties.values;
+    const colors = feature.properties.colors;
+    const labels = feature.properties.labels;
+    const total = values.reduce((a, b) => a + b, 0);
+    const radius = {min_radius} + Math.sqrt(total) * {scale_factor:.6f};
+    const scale = radius * 2.5;
+
+    const icon = L.divIcon({{
+        html: pieSVG({{
+            values: values,
+            colors: colors,
+            width: scale,
+            height: scale,
+            radius: radius,
+            fontSize: 10
+        }}),
+        className: "custom-marker",
+        iconSize: L.point(scale, scale),
+        iconAnchor: [scale / 2, scale / 2]
+    }});
+
+    const marker = L.marker(latlng, {{ icon: icon }});
+    marker.bindTooltip(
+        `<b>${{feature.properties.name}}</b><br/>` +
+        values.map((val, i) => {{
+            const color = colors[i];
+            const label = labels[i];
+            return `<span style="color:${{color}}">&#9679;</span> ${{label}}: ${{val}}`;
+        }}).join("<br/>"),
+        {{
+            direction: 'top',
+            offset: [0, -scale / 2],
+            opacity: 0.9
+        }}
+    );
+    return marker;
+}}""")
+
+
+
+# ---------------------------------------
+# Cluster markers
+# ---------------------------------------
+cluster_to_layer = assign(f"""function(feature, latlng, index, context) {{
+    {pie_svg_js}
+
+    const leaves = index.getLeaves(feature.properties.cluster_id, Infinity);
+    const colorIndex = {{}};
+    const labelMap = {{}};
+    const colorSums = [];
+
+    for (let i = 0; i < leaves.length; i++) {{
+        const values = leaves[i].properties.values;
+        const colors = leaves[i].properties.colors;
+        const labels = leaves[i].properties.labels;
+
+        for (let j = 0; j < values.length; j++) {{
+            const color = colors[j];
+            const label = labels[j];
+            if (colorIndex[color] === undefined) {{
+                colorIndex[color] = colorSums.length;
+                colorSums.push(0);
+                labelMap[color] = label;
+            }}
+            colorSums[colorIndex[color]] += values[j];
+        }}
+    }}
+
+    const orderedColors = Object.keys(colorIndex).sort((a, b) => colorIndex[a] - colorIndex[b]);
+    const orderedValues = orderedColors.map(color => colorSums[colorIndex[color]]);
+    const orderedLabels = orderedColors.map(color => labelMap[color]);
+    const total = orderedValues.reduce((a, b) => a + b, 0);
+    const radius = {min_radius} + Math.sqrt(total) * {scale_factor:.6f};
+    const scale = radius * 2.5;
+
+    const icon = L.divIcon({{
+        html: pieSVG({{
+            values: orderedValues,
+            colors: orderedColors,
+            width: scale,
+            height: scale,
+            radius: radius,
+            fontSize: 12
+        }}),
+        className: "marker-cluster",
+        iconSize: L.point(scale, scale),
+        iconAnchor: [scale / 2, scale / 2]
+    }});
+
+    const marker = L.marker(latlng, {{ icon: icon }});
+    marker.bindTooltip(
+        `Cluster of ${{leaves.length}} Sites<br/>` +
+        orderedValues.map((val, i) => {{
+            const color = orderedColors[i];
+            const label = orderedLabels[i];
+            return `<span style="color:${{color}}">&#9679;</span> ${{label}}: ${{val}}`;
+        }}).join("<br/>"),
+        {{
+            direction: 'top',
+            offset: [0, -scale / 2],
+            opacity: 0.9
+        }}
+    );
+
+    return marker;
+}}""")
+
+
+
 def generate_network_map(self, selected_period: str, selected_time: int, long_format: bool, zoom_level: int, map_options: dict) -> list:
     """
     Generates a network map visualization using power flow data and bus locations.
@@ -384,170 +553,171 @@ def generate_node_layer(buses: pd.DataFrame, gi: pd.DataFrame, vGenP_filtered: p
     max_radius = 16
     sqrt_max = math.sqrt(max_total) if max_total > 0 else 1
     scale_factor = (max_radius - min_radius) / sqrt_max
+    print(scale_factor)
 
-    # ---------------------------------------
-    # Pie SVG JS
-    # ---------------------------------------
-    pie_svg_js = """
-    function pieSVG(opt) {
-        function getCoords(cx, cy, radius, angle) {
-            const rad = (angle - 90) * Math.PI / 180;
-            return {
-                x: cx + radius * Math.cos(rad),
-                y: cy + radius * Math.sin(rad)
-            };
-        }
+#     # ---------------------------------------
+#     # Pie SVG JS
+#     # ---------------------------------------
+#     pie_svg_js = """
+#     function pieSVG(opt) {
+#         function getCoords(cx, cy, radius, angle) {
+#             const rad = (angle - 90) * Math.PI / 180;
+#             return {
+#                 x: cx + radius * Math.cos(rad),
+#                 y: cy + radius * Math.sin(rad)
+#             };
+#         }
 
-        function describeSlice(cx, cy, r, startAngle, endAngle) {
-            const start = getCoords(cx, cy, r, startAngle);
-            const end = getCoords(cx, cy, r, endAngle);
-            const largeArc = (endAngle - startAngle) > 180 ? 1 : 0;
+#         function describeSlice(cx, cy, r, startAngle, endAngle) {
+#             const start = getCoords(cx, cy, r, startAngle);
+#             const end = getCoords(cx, cy, r, endAngle);
+#             const largeArc = (endAngle - startAngle) > 180 ? 1 : 0;
 
-            return [
-                "M", cx, cy,
-                "L", start.x, start.y,
-                "A", r, r, 0, largeArc, 1, end.x, end.y,
-                "Z"
-            ].join(" ");
-        }
+#             return [
+#                 "M", cx, cy,
+#                 "L", start.x, start.y,
+#                 "A", r, r, 0, largeArc, 1, end.x, end.y,
+#                 "Z"
+#             ].join(" ");
+#         }
 
-        opt = Object.assign({
-            width: 60,
-            height: 60,
-            radius: 20,
-            fontSize: 14,
-            values: [10, 10, 10],
-            colors: ['green', 'orange', 'red']
-        }, opt);
+#         opt = Object.assign({
+#             width: 60,
+#             height: 60,
+#             radius: 20,
+#             fontSize: 14,
+#             values: [10, 10, 10],
+#             colors: ['green', 'orange', 'red']
+#         }, opt);
 
-        const sum = opt.values.reduce((a, b) => a + b, 0);
-        let startAngle = 0;
-        let paths = '';
+#         const sum = opt.values.reduce((a, b) => a + b, 0);
+#         let startAngle = 0;
+#         let paths = '';
 
-        for (let i = 0; i < opt.values.length; i++) {
-            const sliceAngle = (opt.values[i] / sum) * 360;
-            const endAngle = startAngle + sliceAngle;
-            const d = describeSlice(opt.width/2, opt.height/2, opt.radius, startAngle, endAngle);
-            paths += `<path fill="${opt.colors[i]}" d="${d}"></path>`;
-            startAngle = endAngle;
-        }
+#         for (let i = 0; i < opt.values.length; i++) {
+#             const sliceAngle = (opt.values[i] / sum) * 360;
+#             const endAngle = startAngle + sliceAngle;
+#             const d = describeSlice(opt.width/2, opt.height/2, opt.radius, startAngle, endAngle);
+#             paths += `<path fill="${opt.colors[i]}" d="${d}"></path>`;
+#             startAngle = endAngle;
+#         }
 
-        return `<svg width="${opt.width}" height="${opt.height}">${paths}</svg>`;
-    }
-    """
+#         return `<svg width="${opt.width}" height="${opt.height}">${paths}</svg>`;
+#     }
+#     """
 
-    # ---------------------------------------
-    # Point markers
-    # ---------------------------------------
-    point_to_layer = assign(f"""function(feature, latlng) {{
-        {pie_svg_js}
+#     # ---------------------------------------
+#     # Point markers
+#     # ---------------------------------------
+#     point_to_layer = assign(f"""function(feature, latlng) {{
+#         {pie_svg_js}
 
-        const values = feature.properties.values;
-        const colors = feature.properties.colors;
-        const labels = feature.properties.labels;
-        const total = values.reduce((a, b) => a + b, 0);
-        const radius = {min_radius} + Math.sqrt(total) * {scale_factor:.6f};
-        const scale = radius * 2.5;
+#         const values = feature.properties.values;
+#         const colors = feature.properties.colors;
+#         const labels = feature.properties.labels;
+#         const total = values.reduce((a, b) => a + b, 0);
+#         const radius = {min_radius} + Math.sqrt(total) * {scale_factor:.6f};
+#         const scale = radius * 2.5;
 
-        const icon = L.divIcon({{
-            html: pieSVG({{
-                values: values,
-                colors: colors,
-                width: scale,
-                height: scale,
-                radius: radius,
-                fontSize: 10
-            }}),
-            className: "custom-marker",
-            iconSize: L.point(scale, scale),
-            iconAnchor: [scale / 2, scale / 2]
-        }});
+#         const icon = L.divIcon({{
+#             html: pieSVG({{
+#                 values: values,
+#                 colors: colors,
+#                 width: scale,
+#                 height: scale,
+#                 radius: radius,
+#                 fontSize: 10
+#             }}),
+#             className: "custom-marker",
+#             iconSize: L.point(scale, scale),
+#             iconAnchor: [scale / 2, scale / 2]
+#         }});
 
-        const marker = L.marker(latlng, {{ icon: icon }});
-        marker.bindTooltip(
-            `<b>${{feature.properties.name}}</b><br/>` +
-            values.map((val, i) => {{
-                const color = colors[i];
-                const label = labels[i];
-                return `<span style="color:${{color}}">&#9679;</span> ${{label}}: ${{val}}`;
-            }}).join("<br/>"),
-            {{
-                direction: 'top',
-                offset: [0, -scale / 2],
-                opacity: 0.9
-            }}
-        );
-        return marker;
-    }}""")
+#         const marker = L.marker(latlng, {{ icon: icon }});
+#         marker.bindTooltip(
+#             `<b>${{feature.properties.name}}</b><br/>` +
+#             values.map((val, i) => {{
+#                 const color = colors[i];
+#                 const label = labels[i];
+#                 return `<span style="color:${{color}}">&#9679;</span> ${{label}}: ${{val}}`;
+#             }}).join("<br/>"),
+#             {{
+#                 direction: 'top',
+#                 offset: [0, -scale / 2],
+#                 opacity: 0.9
+#             }}
+#         );
+#         return marker;
+#     }}""")
 
 
 
-    # ---------------------------------------
-    # Cluster markers
-    # ---------------------------------------
-    cluster_to_layer = assign(f"""function(feature, latlng, index, context) {{
-        {pie_svg_js}
+#     # ---------------------------------------
+#     # Cluster markers
+#     # ---------------------------------------
+#     cluster_to_layer = assign(f"""function(feature, latlng, index, context) {{
+#         {pie_svg_js}
 
-        const leaves = index.getLeaves(feature.properties.cluster_id, Infinity);
-        const colorIndex = {{}};
-        const labelMap = {{}};
-        const colorSums = [];
+#         const leaves = index.getLeaves(feature.properties.cluster_id, Infinity);
+#         const colorIndex = {{}};
+#         const labelMap = {{}};
+#         const colorSums = [];
 
-        for (let i = 0; i < leaves.length; i++) {{
-            const values = leaves[i].properties.values;
-            const colors = leaves[i].properties.colors;
-            const labels = leaves[i].properties.labels;
+#         for (let i = 0; i < leaves.length; i++) {{
+#             const values = leaves[i].properties.values;
+#             const colors = leaves[i].properties.colors;
+#             const labels = leaves[i].properties.labels;
 
-            for (let j = 0; j < values.length; j++) {{
-                const color = colors[j];
-                const label = labels[j];
-                if (colorIndex[color] === undefined) {{
-                    colorIndex[color] = colorSums.length;
-                    colorSums.push(0);
-                    labelMap[color] = label;
-                }}
-                colorSums[colorIndex[color]] += values[j];
-            }}
-        }}
+#             for (let j = 0; j < values.length; j++) {{
+#                 const color = colors[j];
+#                 const label = labels[j];
+#                 if (colorIndex[color] === undefined) {{
+#                     colorIndex[color] = colorSums.length;
+#                     colorSums.push(0);
+#                     labelMap[color] = label;
+#                 }}
+#                 colorSums[colorIndex[color]] += values[j];
+#             }}
+#         }}
 
-        const orderedColors = Object.keys(colorIndex).sort((a, b) => colorIndex[a] - colorIndex[b]);
-        const orderedValues = orderedColors.map(color => colorSums[colorIndex[color]]);
-        const orderedLabels = orderedColors.map(color => labelMap[color]);
-        const total = orderedValues.reduce((a, b) => a + b, 0);
-        const radius = {min_radius} + Math.sqrt(total) * {scale_factor:.6f};
-        const scale = radius * 2.5;
+#         const orderedColors = Object.keys(colorIndex).sort((a, b) => colorIndex[a] - colorIndex[b]);
+#         const orderedValues = orderedColors.map(color => colorSums[colorIndex[color]]);
+#         const orderedLabels = orderedColors.map(color => labelMap[color]);
+#         const total = orderedValues.reduce((a, b) => a + b, 0);
+#         const radius = {min_radius} + Math.sqrt(total) * {scale_factor:.6f};
+#         const scale = radius * 2.5;
 
-        const icon = L.divIcon({{
-            html: pieSVG({{
-                values: orderedValues,
-                colors: orderedColors,
-                width: scale,
-                height: scale,
-                radius: radius,
-                fontSize: 12
-            }}),
-            className: "marker-cluster",
-            iconSize: L.point(scale, scale),
-            iconAnchor: [scale / 2, scale / 2]
-        }});
+#         const icon = L.divIcon({{
+#             html: pieSVG({{
+#                 values: orderedValues,
+#                 colors: orderedColors,
+#                 width: scale,
+#                 height: scale,
+#                 radius: radius,
+#                 fontSize: 12
+#             }}),
+#             className: "marker-cluster",
+#             iconSize: L.point(scale, scale),
+#             iconAnchor: [scale / 2, scale / 2]
+#         }});
 
-        const marker = L.marker(latlng, {{ icon: icon }});
-        marker.bindTooltip(
-            `Cluster of ${{leaves.length}} Sites<br/>` +
-            orderedValues.map((val, i) => {{
-                const color = orderedColors[i];
-                const label = orderedLabels[i];
-                return `<span style="color:${{color}}">&#9679;</span> ${{label}}: ${{val}}`;
-            }}).join("<br/>"),
-            {{
-                direction: 'top',
-                offset: [0, -scale / 2],
-                opacity: 0.9
-            }}
-        );
+#         const marker = L.marker(latlng, {{ icon: icon }});
+#         marker.bindTooltip(
+#             `Cluster of ${{leaves.length}} Sites<br/>` +
+#             orderedValues.map((val, i) => {{
+#                 const color = orderedColors[i];
+#                 const label = orderedLabels[i];
+#                 return `<span style="color:${{color}}">&#9679;</span> ${{label}}: ${{val}}`;
+#             }}).join("<br/>"),
+#             {{
+#                 direction: 'top',
+#                 offset: [0, -scale / 2],
+#                 opacity: 0.9
+#             }}
+#         );
 
-        return marker;
-}}""")
+#         return marker;
+# }}""")
 
 
     # ---------------------------------------
