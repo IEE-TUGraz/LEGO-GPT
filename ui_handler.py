@@ -10,7 +10,7 @@ import dash_leaflet.express as dlx
 from dash_extensions.javascript import assign
 import math
 
-def generate_network_map(vLineP: pd.DataFrame, buses:pd.DataFrame, selected_period: str, selected_time: int, long_format: bool, zoom_level: int, map_options: dict) -> list:
+def generate_network_map(self, selected_period: str, selected_time: int, long_format: bool, zoom_level: int, map_options: dict) -> list:
     """
     Generates a network map visualization using power flow data and bus locations.
     
@@ -58,35 +58,20 @@ def generate_network_map(vLineP: pd.DataFrame, buses:pd.DataFrame, selected_peri
     default_zoom = map_options["default_zoom"]
 
     if long_format:
-        vLineP_filtered = vLineP[vLineP["k"] == selected_time]
+        vLineP_filtered = self.vLineP[self.vLineP["k"] == selected_time]
+        vGenP_filtered = self.vGenP[self.vGenP["k"] == selected_time]
     else:
-        vLineP_filtered = vLineP[(vLineP["rp"] == selected_period) & (vLineP["k"] == selected_time)]
+        vLineP_filtered = self.vLineP[(self.vLineP["rp"] == selected_period) & (self.vLineP["k"] == selected_time)]
+        vGenP_filtered = self.vGenP[(self.vGenP["rp"] == selected_period) & (self.vGenP["k"] == selected_time)]
 
     # Generate positions and colors
     positions = []
     for i, j, flow in zip(vLineP_filtered["i"].values, vLineP_filtered["j"].values, vLineP_filtered["values"].values):
         if flow < 0:
-            positions.append([(buses.loc[j, 'lat'], buses.loc[j, 'lon']), (buses.loc[i, 'lat'], buses.loc[i, 'lon'])])
+            positions.append([(self.i.loc[j, 'lat'], self.i.loc[j, 'lon']), (self.i.loc[i, 'lat'], self.i.loc[i, 'lon']) ])
         else:
-            positions.append([(buses.loc[i, 'lat'], buses.loc[i, 'lon']), (buses.loc[j, 'lat'], buses.loc[j, 'lon'])])
+            positions.append([(self.i.loc[i, 'lat'], self.i.loc[i, 'lon']), (self.i.loc[j, 'lat'], self.i.loc[j, 'lon'])])
 
-    color_values = vLineP_filtered["rel_values"].to_numpy()
-    color_map = plt.get_cmap('RdYlGn_r')
-    colors = [
-        "#{:02x}{:02x}{:02x}".format(int(255 * c[0]), int(255 * c[1]), int(255 * c[2]))
-        for c in [color_map(s) for s in color_values]
-    ]
-
-    polylines = [
-        dl.Polyline(
-            positions=position,
-            color=color, weight=line_weight, id=str(int(line)),
-            children=[
-                dl.Popup(f"Power Flow: {abs(vLineP_filtered.iloc[idx]['values']):.2f} MW, Line rating: {vLineP_filtered.iloc[idx]['pPmax']:.2f} MW"),
-            ],
-            n_clicks=0
-        ) for idx, (position, line, color) in enumerate(zip(positions, vLineP_filtered["line"].values, colors))
-    ]
 
     def get_arrow_size(zoom):
         if zoom is None:
@@ -98,34 +83,79 @@ def generate_network_map(vLineP: pd.DataFrame, buses:pd.DataFrame, selected_peri
             zoom = default_zoom
         return max(node_min, int(zoom * node_scale))
 
+
     arrow_size = get_arrow_size(zoom_level)
-    node_size = get_node_size(zoom_level)
-
-    patterns = [[dict(offset='50%', repeat='25%', arrowHead=dict(
-        pixelSize=arrow_size,
-        polygon=False,
-        pathOptions=dict(stroke=True, color=color)
-    ))] for color in colors]
-
-    arrows = [dl.PolylineDecorator(children=polyline, patterns=pattern, n_clicks=0)
-              for polyline, pattern in zip(polylines, patterns)]
-
-    circles = [
-        dl.CircleMarker(
-            center=(node.lat, node.lon),
-            radius=node_size, fillColor="#8C564B", weight=1, color="black",
-            fill=True, fillOpacity=1, id=node.Index,
-            children=dl.Popup(node.Index), n_clicks=0
-        ) for node in buses.itertuples(index=True)
-    ]
-
-    tile_layer = dl.TileLayer(url='https://tile.jawg.io/jawg-light/{z}/{x}/{y}{r}.png?access-token=K29acH6XcPPrHIAdDENjCaooa47B7CDZieD4CPBI2EiVrg8iKRjqiS80D8ACx9Np')
-    node_layer = generate_node_layer(buses)
 
 
 
-    #return [tile_layer, dl.LayerGroup(children=arrows + circles, id="network-layer" + str(random.randint(0, 1000)))]
-    return [tile_layer, dl.LayerGroup(children=arrows, id="network-layer" + str(random.randint(0, 1000))), node_layer]
+    # Prepare the full layer contents (lines + arrows)
+    network_layer = []
+    for idx, (i_pos, line_id, flow_val, rel_val) in enumerate(zip(
+        positions,
+        vLineP_filtered["line"].values,
+        vLineP_filtered["values"],
+        vLineP_filtered["rel_values"]
+    )):
+        # Get color from colormap
+        color_rgb = plt.get_cmap('RdYlGn_r')(rel_val)[:3]
+        color = "#{:02x}{:02x}{:02x}".format(
+            int(color_rgb[0]*255), int(color_rgb[1]*255), int(color_rgb[2]*255)
+        )
+
+        # Polyline base for the arrowheads
+        polyline_base = dl.Polyline(
+            positions=i_pos,
+            color="black",
+            weight=line_weight,
+            opacity = 0,  
+            id=f"line_base-{line_id}",    
+            n_clicks=0
+        )
+
+        # Polyline for the line itself
+        polyline_line = dl.Polyline(
+            positions=i_pos,
+            color=color,
+            weight=line_weight,
+            id=f"line-{line_id}_{random.randint(0, 1000)}",  # Add random ID to force update, builds computational load over time
+            children=[
+            dl.Popup(f"Power Flow: {abs(flow_val):.2f} MW, Line rating: {vLineP_filtered.iloc[idx]['pPmax']:.2f} MW")
+            ],       
+            n_clicks=0
+        )
+
+        # PolylineDecorator (arrow)
+        polyline_decorator = dl.PolylineDecorator(
+            patterns=[dict(
+                offset='50%',
+                repeat='25%',
+                arrowHead=dict(
+                    pixelSize=arrow_size,
+                    polygon=False,
+                    pathOptions=dict(stroke=True, color=color)
+                )
+            )],
+            children=[polyline_base],  
+            n_clicks=0
+        )
+
+        # Append both line and arrow as top-level items
+        network_layer.extend([polyline_decorator, polyline_line])
+
+
+    # circles = [
+    #     dl.CircleMarker(
+    #         center=(node.lat, node.lon),
+    #         radius=node_size, fillColor="#8C564B", weight=1, color="black",
+    #         fill=True, fillOpacity=1, id=node.Index,
+    #         children=dl.Popup(node.Index), n_clicks=0
+    #     ) for node in self.i.itertuples(index=True)
+    # ]
+
+    node_layer = generate_node_layer(self.i, self.gi, vGenP_filtered)
+
+
+    return network_layer, node_layer
 
 
 def filter_dataframe(self, attr_str: str, rp: str, scope: str, local_node: str=None, local_line: str=None, k_range: list=[]) -> pd.DataFrame:
@@ -281,110 +311,148 @@ def generate_dynamic_plot(self, x_axis: str, y_axis: str, line_idx: str, node_id
     return html.Div([dcc.Graph(figure=fig, id="dynamic-plot" + str(random.randint(0, 1000)), style={'height': '100%', 'width': '100%'})],
                     style={'flex': '1', 'min-width': '0', 'height': '90vh', 'margin-top': '0px'})
 
-def generate_node_layer(buses: pd.DataFrame) -> dl.GeoJSON:
-    # ---------------------------------------
-    # Create sample data (replace with real later)
-    # ---------------------------------------
-    def create_sample_data(buses):
-        return [
-            dict(
-                id=f"site_{i}",
-                lat=bus.lat,
-                lon=bus.lon,
-                name=f"Site {i}",
-                cat1=i % 3 + 1,
-                cat2=i % 5 + 1,
-                cat3=i % 7 + 1,
-            )
-            for i, bus in enumerate(buses.itertuples(index=True))
-        ]
+def generate_node_layer(buses: pd.DataFrame, gi: pd.DataFrame, vGenP_filtered: pd.DataFrame) -> dl.GeoJSON:
 
-    # Create data
-    raw_data = create_sample_data(buses)
-    geojson = dlx.dicts_to_geojson(raw_data)
+    # merge vGenP and gi on g for pie chart plots
+    merged = pd.merge(vGenP_filtered, gi, on="g", how="left")
+    grouped = (
+        merged.groupby(["i", "tec"])["values"]
+        .sum()
+        .reset_index()
+    ) 
+    pivoted = grouped.pivot(index="i", columns="tec", values="values").fillna(0)
+    pivoted.reset_index(inplace=True)
+    pivoted = pivoted.merge(buses, left_on="i", right_on="values", how="left")
+
+    # ---------------------------------------
+    # Category colors
+    # ---------------------------------------
+    category_colors = {
+        "Wind": "#2ecc71",
+        "Solar": "#27ae60",
+        "OtherRES": "#1e8449",
+        "Offshore": "#145a32",
+        "CSP": "#117a65",
+        "Coal": "#c0392b",
+        "Gas": "#e74c3c",
+        "Oil": "#a93226",
+        "OtherNoRES": "#922b21",
+        "Nuclear": "#7b241c",
+        "HS": "#3498db",
+        "HPS": "#2e86c1",
+        "RoR": "#21618c",
+        "BESS": "#7f8c8d",
+    }
+
+    # ---------------------------------------
+    # Prepare GeoJSON input
+    # ---------------------------------------
+    geo_data = []
+    max_total = 0
+    for _, row in pivoted.iterrows():
+        values = []
+        colors = []
+        total = 0
+        for tec, val in row.items():
+            if tec in category_colors and val > 0:
+                values.append(val)
+                colors.append(category_colors[tec])
+                total += val
+
+        if total == 0 or pd.isna(row["lat"]) or pd.isna(row["lon"]):
+            continue  # skip empty or invalid rows
+
+        geo_data.append(dict(
+            id=row["i"],
+            lat=row["lat"],
+            lon=row["lon"],
+            name=row["i"],
+            values=values,
+            colors=colors,
+            labels=[tec for tec, val in row.items() if tec in category_colors and val > 0]
+        ))
+
+        max_total = max(max_total, total)
+
+    geojson = dlx.dicts_to_geojson(geo_data)
     geobuf = dlx.geojson_to_geobuf(geojson)
 
     # ---------------------------------------
-    # Precompute size scaling
+    # Scaling config
     # ---------------------------------------
-    min_radius = 6
-    max_radius =18
-    max_total = max(d["cat1"] + d["cat2"] + d["cat3"] for d in raw_data)
-    sqrt_max = math.sqrt(max_total)
+    min_radius = 8
+    max_radius = 16
+    sqrt_max = math.sqrt(max_total) if max_total > 0 else 1
     scale_factor = (max_radius - min_radius) / sqrt_max
 
     # ---------------------------------------
-    # SVG pie chart function (JS)
+    # Pie SVG JS
     # ---------------------------------------
     pie_svg_js = """
     function pieSVG(opt) {
-    function getCoords(cx, cy, radius, angle) {
-        const rad = (angle - 90) * Math.PI / 180;
-        return {
-        x: cx + radius * Math.cos(rad),
-        y: cy + radius * Math.sin(rad)
-        };
-    }
+        function getCoords(cx, cy, radius, angle) {
+            const rad = (angle - 90) * Math.PI / 180;
+            return {
+                x: cx + radius * Math.cos(rad),
+                y: cy + radius * Math.sin(rad)
+            };
+        }
 
-    function describeSlice(cx, cy, r, startAngle, endAngle) {
-        const start = getCoords(cx, cy, r, startAngle);
-        const end = getCoords(cx, cy, r, endAngle);
-        const largeArc = (endAngle - startAngle) > 180 ? 1 : 0;
+        function describeSlice(cx, cy, r, startAngle, endAngle) {
+            const start = getCoords(cx, cy, r, startAngle);
+            const end = getCoords(cx, cy, r, endAngle);
+            const largeArc = (endAngle - startAngle) > 180 ? 1 : 0;
 
-        return [
-        "M", cx, cy,
-        "L", start.x, start.y,
-        "A", r, r, 0, largeArc, 1, end.x, end.y,
-        "Z"
-        ].join(" ");
-    }
+            return [
+                "M", cx, cy,
+                "L", start.x, start.y,
+                "A", r, r, 0, largeArc, 1, end.x, end.y,
+                "Z"
+            ].join(" ");
+        }
 
-    opt = Object.assign({
-        width: 60,
-        height: 60,
-        radius: 20,
-        fontSize: 14,
-        text: '',
-        values: [10, 10, 10],
-        colors: ['green', 'orange', 'red']
-    }, opt);
+        opt = Object.assign({
+            width: 60,
+            height: 60,
+            radius: 20,
+            fontSize: 14,
+            values: [10, 10, 10],
+            colors: ['green', 'orange', 'red']
+        }, opt);
 
-    const sum = opt.values.reduce((a, b) => a + b, 0);
-    let startAngle = 0;
-    let paths = '';
+        const sum = opt.values.reduce((a, b) => a + b, 0);
+        let startAngle = 0;
+        let paths = '';
 
-    for (let i = 0; i < opt.values.length; i++) {
-        const sliceAngle = (opt.values[i] / sum) * 360;
-        const endAngle = startAngle + sliceAngle;
-        const d = describeSlice(opt.width/2, opt.height/2, opt.radius, startAngle, endAngle);
-        paths += `<path fill="${opt.colors[i]}" d="${d}"></path>`;
-        startAngle = endAngle;
-    }
+        for (let i = 0; i < opt.values.length; i++) {
+            const sliceAngle = (opt.values[i] / sum) * 360;
+            const endAngle = startAngle + sliceAngle;
+            const d = describeSlice(opt.width/2, opt.height/2, opt.radius, startAngle, endAngle);
+            paths += `<path fill="${opt.colors[i]}" d="${d}"></path>`;
+            startAngle = endAngle;
+        }
 
-    return `<svg width="${opt.width}" height="${opt.height}">
-                ${paths}
-            </svg>`;
+        return `<svg width="${opt.width}" height="${opt.height}">${paths}</svg>`;
     }
     """
 
     # ---------------------------------------
-    # Individual node marker
+    # Point markers
     # ---------------------------------------
     point_to_layer = assign(f"""function(feature, latlng) {{
         {pie_svg_js}
 
-        const cat1 = feature.properties.cat1;
-        const cat2 = feature.properties.cat2;
-        const cat3 = feature.properties.cat3;
-        const total = cat1 + cat2 + cat3;
-
+        const values = feature.properties.values;
+        const colors = feature.properties.colors;
+        const labels = feature.properties.labels;
+        const total = values.reduce((a, b) => a + b, 0);
         const radius = {min_radius} + Math.sqrt(total) * {scale_factor:.6f};
         const scale = radius * 2.5;
 
         const icon = L.divIcon({{
             html: pieSVG({{
-                values: [cat1, cat2, cat3],
-                colors: ['green', 'orange', 'red'],
+                values: values,
+                colors: colors,
                 width: scale,
                 height: scale,
                 radius: radius,
@@ -397,10 +465,12 @@ def generate_node_layer(buses: pd.DataFrame) -> dl.GeoJSON:
 
         const marker = L.marker(latlng, {{ icon: icon }});
         marker.bindTooltip(
-            `<b>${{feature.properties.name}}</b><br/>
-             Cat1: ${{cat1}}<br/>
-             Cat2: ${{cat2}}<br/>
-             Cat3: ${{cat3}}`,
+            `<b>${{feature.properties.name}}</b><br/>` +
+            values.map((val, i) => {{
+                const color = colors[i];
+                const label = labels[i];
+                return `<span style="color:${{color}}">&#9679;</span> ${{label}}: ${{val}}`;
+            }}).join("<br/>"),
             {{
                 direction: 'top',
                 offset: [0, -scale / 2],
@@ -410,28 +480,47 @@ def generate_node_layer(buses: pd.DataFrame) -> dl.GeoJSON:
         return marker;
     }}""")
 
+
+
     # ---------------------------------------
-    # Clustered marker
+    # Cluster markers
     # ---------------------------------------
     cluster_to_layer = assign(f"""function(feature, latlng, index, context) {{
         {pie_svg_js}
 
         const leaves = index.getLeaves(feature.properties.cluster_id, Infinity);
-        let total1 = 0, total2 = 0, total3 = 0;
-        for (let i = 0; i < leaves.length; ++i) {{
-            total1 += leaves[i].properties.cat1;
-            total2 += leaves[i].properties.cat2;
-            total3 += leaves[i].properties.cat3;
+        const colorIndex = {{}};
+        const labelMap = {{}};
+        const colorSums = [];
+
+        for (let i = 0; i < leaves.length; i++) {{
+            const values = leaves[i].properties.values;
+            const colors = leaves[i].properties.colors;
+            const labels = leaves[i].properties.labels;
+
+            for (let j = 0; j < values.length; j++) {{
+                const color = colors[j];
+                const label = labels[j];
+                if (colorIndex[color] === undefined) {{
+                    colorIndex[color] = colorSums.length;
+                    colorSums.push(0);
+                    labelMap[color] = label;
+                }}
+                colorSums[colorIndex[color]] += values[j];
+            }}
         }}
 
-        const total = total1 + total2 + total3;
+        const orderedColors = Object.keys(colorIndex).sort((a, b) => colorIndex[a] - colorIndex[b]);
+        const orderedValues = orderedColors.map(color => colorSums[colorIndex[color]]);
+        const orderedLabels = orderedColors.map(color => labelMap[color]);
+        const total = orderedValues.reduce((a, b) => a + b, 0);
         const radius = {min_radius} + Math.sqrt(total) * {scale_factor:.6f};
         const scale = radius * 2.5;
 
         const icon = L.divIcon({{
             html: pieSVG({{
-                values: [total1, total2, total3],
-                colors: ['green', 'orange', 'red'],
+                values: orderedValues,
+                colors: orderedColors,
                 width: scale,
                 height: scale,
                 radius: radius,
@@ -444,10 +533,12 @@ def generate_node_layer(buses: pd.DataFrame) -> dl.GeoJSON:
 
         const marker = L.marker(latlng, {{ icon: icon }});
         marker.bindTooltip(
-            `Cluster of ${{leaves.length}} Sites<br/>
-             Total Cat1: ${{total1}}<br/>
-             Total Cat2: ${{total2}}<br/>
-             Total Cat3: ${{total3}}`,
+            `Cluster of ${{leaves.length}} Sites<br/>` +
+            orderedValues.map((val, i) => {{
+                const color = orderedColors[i];
+                const label = orderedLabels[i];
+                return `<span style="color:${{color}}">&#9679;</span> ${{label}}: ${{val}}`;
+            }}).join("<br/>"),
             {{
                 direction: 'top',
                 offset: [0, -scale / 2],
@@ -456,12 +547,14 @@ def generate_node_layer(buses: pd.DataFrame) -> dl.GeoJSON:
         );
 
         return marker;
-    }}""")
+}}""")
+
 
     # ---------------------------------------
     # Return GeoJSON layer
     # ---------------------------------------
     return dl.GeoJSON(
+        id="node-layer",                     # fixed ID (not random anymore!)
         data=geobuf,
         format='geobuf',
         cluster=True,

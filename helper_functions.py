@@ -136,16 +136,16 @@ def extract_excel_to_dataframe(input_dir: str, table: str) -> pd.DataFrame:
     elif table == "gi":
         filenames = [os.path.join(input_dir, tech + ".xlsx") for tech in ["Power_VRES", "Power_ThermalGen", "Power_Storage", "Power_RoR"]]
         sheetnames = ["Power VRES", "Power ThermalGen", "Power Storage", "Power RoR"]
-        use_cols = "B,D"
+        use_cols = "B,C,D"
         skiprows = 7
-        df = pd.DataFrame(columns=["g", "i"])
+        df = pd.DataFrame(columns=["g", "tec", "i"])
         for filename, sheetname in zip(filenames, sheetnames):
             temp_df = pd.read_excel(filename, sheet_name=sheetname, usecols=use_cols, skiprows=skiprows-1, header=None)
-            temp_df.columns = ["g", "i"]
+            temp_df.columns = ["g", "tec", "i"]
             df = pd.concat([df, temp_df], ignore_index=True)
         # reset index
         df.reset_index(drop=True, inplace=True)
-        df_g = df["g"].drop_duplicates().reset_index(drop=True)
+        df_g = df[["g"]].drop_duplicates().reset_index(drop=True)
 
     elif table == "vLineP":
 

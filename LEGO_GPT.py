@@ -327,6 +327,7 @@ class LEGO_GPT:
                         dl.TileLayer(url='https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
                                      attribution='&copy; <a href="https://carto.com/">CARTO</a>'),
                         dl.LayerGroup(id="network-layer"),
+                        html.Div(id="node-wrapper"),
                     ], bounds=self.bounds, style={'height': '100%', 'width': '100%', 'background-color': '#6BA3A3'}, id="network-map",
                     zoom=self.map_options["default_zoom"], center=[np.mean(self.i['lat']), np.mean(self.i['lon'])]),
                 ], style={'flex': '1', 'min-width': '0', 'height': '90vh'}),
@@ -378,23 +379,26 @@ class LEGO_GPT:
         """
 
         @self.app.callback(
-            Output("network-map", "children"),  
-            [Input("rep-period-dropdown", "value"),
+            [
+             Output("network-layer", "children"),  
+             Output("node-wrapper", "children")],
+            [
+             Input("rep-period-dropdown", "value"),
              Input("time-slider", "value"),
              Input("map-zoom", "data")
             ],          
              # prevent_initial_call=True
         )
         def update_network(selected_period, selected_time, zoom_level):
-            return generate_network_map(
-                vLineP=self.vLineP,
-                buses=self.i,
+            arrows, node_layer = generate_network_map(
+                self=self,
                 selected_period=selected_period,
                 selected_time=selected_time,
                 long_format=self.long_format,
                 zoom_level=zoom_level,
                 map_options=self.map_options,
             )
+            return arrows, node_layer
         
         @self.app.callback(
             Output("last-clicked-line", "data"),
