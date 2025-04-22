@@ -127,9 +127,7 @@ def get_data(obj, ):
             self.vLineP = self.vLineP[self.vLineP["duplicate"] == False].copy()
             # drop duplicate column
             self.vLineP.drop(columns=["duplicate"], inplace=True)
-            print(self.gi.head())
-            print(self.g.head())
-            print(self.vGenP.head())
+
             # save all the modified tables to a sqlite database
             # create a new database
             conn = sqlite3.connect(os.path.join(self.input_dir, "test_data.sqlite"))
@@ -176,10 +174,7 @@ def get_data(obj, ):
                 # load the data as variable with the table name
                 setattr(self, table, h.extract_table_to_dataframe(conn, table)) 
             self.coords = h.extract_excel_to_dataframe(self.input_dir, "coords")
-            print(self.gi.head())
-            print(self.gi["tec"].unique())
-            print(self.g.head())
-            print(self.vGenP.head())
+
             # set value column of vGenP to float type
             self.vGenP["values"] = self.vGenP["values"].astype(float)
 
