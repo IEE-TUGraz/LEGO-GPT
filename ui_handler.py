@@ -181,7 +181,7 @@ cluster_to_layer = assign(f"""function(feature, latlng, index, context) {{
         orderedValues.map((val, i) => {{
             const color = orderedColors[i];
             const label = orderedLabels[i];
-            return `<span style="color:${{color}}">&#9679;</span> ${{label}}: ${{val}}`;
+            return `<span style="color:${{color}}">&#9679;</span> ${{label}}: ${{val.toFixed(1)}}`;
         }}).join("<br/>"),
         {{
             direction: 'top',
