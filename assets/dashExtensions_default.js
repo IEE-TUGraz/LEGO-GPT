@@ -11,17 +11,29 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
                     };
                 }
 
-                function describeSlice(cx, cy, r, startAngle, endAngle) {
-                    const start = getCoords(cx, cy, r, startAngle);
-                    const end = getCoords(cx, cy, r, endAngle);
-                    const largeArc = (endAngle - startAngle) > 180 ? 1 : 0;
-
-                    return [
-                        "M", cx, cy,
-                        "L", start.x, start.y,
-                        "A", r, r, 0, largeArc, 1, end.x, end.y,
-                        "Z"
-                    ].join(" ");
+                function describeSlice(cx, cy, r, startAngle, endAngle, isFullCircle = false) {
+                    if (isFullCircle) {
+                        const midAngle = startAngle + 180;
+                        const start = getCoords(cx, cy, r, startAngle);
+                        const mid = getCoords(cx, cy, r, midAngle);
+                        const end = getCoords(cx, cy, r, endAngle);
+                        return [
+                            "M", start.x, start.y,
+                            "A", r, r, 0, 1, 1, mid.x, mid.y,
+                            "A", r, r, 0, 1, 1, end.x, end.y,
+                            "Z"
+                        ].join(" ");
+                    } else {
+                        const start = getCoords(cx, cy, r, startAngle);
+                        const end = getCoords(cx, cy, r, endAngle);
+                        const largeArc = (endAngle - startAngle) > 180 ? 1 : 0;
+                        return [
+                            "M", cx, cy,
+                            "L", start.x, start.y,
+                            "A", r, r, 0, largeArc, 1, end.x, end.y,
+                            "Z"
+                        ].join(" ");
+                    }
                 }
 
                 opt = Object.assign({
@@ -40,8 +52,9 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
                 for (let i = 0; i < opt.values.length; i++) {
                     const sliceAngle = (opt.values[i] / sum) * 360;
                     const endAngle = startAngle + sliceAngle;
-                    const d = describeSlice(opt.width / 2, opt.height / 2, opt.radius, startAngle, endAngle);
-                    paths += `<path fill="${opt.colors[i]}" d="${d}"></path>`;
+                    const isFullCircle = sliceAngle === 360;
+                    const d = describeSlice(opt.width / 2, opt.height / 2, opt.radius, startAngle, endAngle, isFullCircle);
+                    paths += `<path fill="${opt.colors[i % opt.colors.length]}" d="${d}"></path>`;
                     startAngle = endAngle;
                 }
 
@@ -53,7 +66,7 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
             const colors = feature.properties.colors;
             const labels = feature.properties.labels;
             const total = values.reduce((a, b) => a + b, 0);
-            const radius = 8 + Math.sqrt(total) * 0.030000;
+            const radius = 8 + Math.sqrt(total) * 0.072047;
             const scale = radius * 2.5;
 
             const icon = L.divIcon({
@@ -98,17 +111,29 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
                     };
                 }
 
-                function describeSlice(cx, cy, r, startAngle, endAngle) {
-                    const start = getCoords(cx, cy, r, startAngle);
-                    const end = getCoords(cx, cy, r, endAngle);
-                    const largeArc = (endAngle - startAngle) > 180 ? 1 : 0;
-
-                    return [
-                        "M", cx, cy,
-                        "L", start.x, start.y,
-                        "A", r, r, 0, largeArc, 1, end.x, end.y,
-                        "Z"
-                    ].join(" ");
+                function describeSlice(cx, cy, r, startAngle, endAngle, isFullCircle = false) {
+                    if (isFullCircle) {
+                        const midAngle = startAngle + 180;
+                        const start = getCoords(cx, cy, r, startAngle);
+                        const mid = getCoords(cx, cy, r, midAngle);
+                        const end = getCoords(cx, cy, r, endAngle);
+                        return [
+                            "M", start.x, start.y,
+                            "A", r, r, 0, 1, 1, mid.x, mid.y,
+                            "A", r, r, 0, 1, 1, end.x, end.y,
+                            "Z"
+                        ].join(" ");
+                    } else {
+                        const start = getCoords(cx, cy, r, startAngle);
+                        const end = getCoords(cx, cy, r, endAngle);
+                        const largeArc = (endAngle - startAngle) > 180 ? 1 : 0;
+                        return [
+                            "M", cx, cy,
+                            "L", start.x, start.y,
+                            "A", r, r, 0, largeArc, 1, end.x, end.y,
+                            "Z"
+                        ].join(" ");
+                    }
                 }
 
                 opt = Object.assign({
@@ -127,8 +152,9 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
                 for (let i = 0; i < opt.values.length; i++) {
                     const sliceAngle = (opt.values[i] / sum) * 360;
                     const endAngle = startAngle + sliceAngle;
-                    const d = describeSlice(opt.width / 2, opt.height / 2, opt.radius, startAngle, endAngle);
-                    paths += `<path fill="${opt.colors[i]}" d="${d}"></path>`;
+                    const isFullCircle = sliceAngle === 360;
+                    const d = describeSlice(opt.width / 2, opt.height / 2, opt.radius, startAngle, endAngle, isFullCircle);
+                    paths += `<path fill="${opt.colors[i % opt.colors.length]}" d="${d}"></path>`;
                     startAngle = endAngle;
                 }
 
@@ -162,7 +188,7 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
             const orderedValues = orderedColors.map(color => colorSums[colorIndex[color]]);
             const orderedLabels = orderedColors.map(color => labelMap[color]);
             const total = orderedValues.reduce((a, b) => a + b, 0);
-            const radius = 8 + Math.sqrt(total) * 0.030000;
+            const radius = 8 + Math.sqrt(total) * 0.072047;
             const scale = radius * 2.5;
 
             const icon = L.divIcon({
@@ -187,7 +213,7 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
                 orderedValues.map((val, i) => {
                     const color = orderedColors[i];
                     const label = orderedLabels[i];
-                    return `<span style="color:${color}">&#9679;</span> ${label}: ${val}`;
+                    return `<span style="color:${color}">&#9679;</span> ${label}: ${val.toFixed(1)}`;
                 }).join("<br/>"), {
                     direction: 'top',
                     offset: [0, -scale / 2],
