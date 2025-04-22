@@ -1,8 +1,7 @@
-input_type: excel # excel, sqlite  or V2G
-input_dir: "path_to_directory" # directory with the input
+input_type: excel # excel or sqlite
+input_dir: PATH TO LEGO RESULTS
 
 tables:
-  - rp
   - k
   - i
   - g
@@ -10,9 +9,6 @@ tables:
   - la
   - vLineP
   - vGenP
-  - vStIntraRes
-  - vStInterRes
-  - pDemandP
   - pPmax
 
 dropdown_options_y:
@@ -33,8 +29,32 @@ dropdown_options_x:
 
 map_options:
   line_weight: 2
-  default_zoom: 7
-  arrow_zoom_scale: 1.2
+  default_zoom: 5
+  arrow_zoom_scale: 0.5
   arrow_min_size: 0.5
-  node_zoom_scale: 0.9
-  node_min_size: 1.5
+  pie_chart_min_radius: 8
+  pie_chart_max_radius: 16
+
+  technology_colors:
+    Wind: "#2ecc71"
+    Solar: "#27ae60"
+    OtherRES: "#1e8449"
+    Offshore: "#145a32"
+    CSP: "#117a65"
+    Coal: "#c0392b"
+    Gas: "#e74c3c"
+    Oil: "#a93226"
+    OtherNoRES: "#922b21"
+    Nuclear: "#7b241c"
+    HS: "#3498db"
+    HPS: "#2e86c1"
+    RoR: "#21618c"
+    BESS: "#7f8c8d"
+    V2G_charging: "#8e44ad"
+    V2G_discharging: "#9b59b6"
+  
+  cluster_options:
+    cluster_radius: 60
+    maxZoom: 16
+   
+    
