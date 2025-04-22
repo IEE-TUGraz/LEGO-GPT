@@ -79,6 +79,10 @@ class LEGO_GPT:
             dropdown_options_y (list): Dropdown options for the Y-axis.
             dropdown_options_x (list): Dropdown options for the X-axis.
             map_options (dict): Mapping options from the configuration.
+            app (dash.Dash): Dash application instance.
+            long_format (bool): Flag indicating if the data is in long format.
+            js_generator (MarkerJS): Instance of MarkerJS for generating pie charts.
+            bounds (list): Bounds for the map visualization.
         """
 
 
@@ -398,9 +402,7 @@ class LEGO_GPT:
                 self=self,
                 selected_period=selected_period,
                 selected_time=selected_time,
-                long_format=self.long_format,
                 zoom_level=zoom_level,
-                map_options=self.map_options,
             )
             return arrows, node_layer
         
