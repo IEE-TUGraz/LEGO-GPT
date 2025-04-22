@@ -1,17 +1,13 @@
 from dash_extensions.javascript import assign
-
-class MarkerConfig:
-    scale_factor = 0.03
-    min_radius = 8
-    max_radius = 16
-
+import pandas as pd
+import numpy as np
 
 class MarkerJS:
 
-    def __init__(self, config: MarkerConfig = MarkerConfig()):
-        self.scale_factor = config.scale_factor
-        self.min_radius = config.min_radius
-        self.max_radius = config.max_radius
+    def __init__(self, map_options: dict, vGenP: pd.DataFrame):
+        self.scale_factor = 1 / (np.sqrt(vGenP['values']).mean() )
+        print(f"Scale factor: {self.scale_factor:.6f}")
+        self.min_radius = map_options["pie_chart_min_radius"]
 
     @staticmethod
     def pie_svg():

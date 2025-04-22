@@ -7,6 +7,9 @@ import helper_functions as h
 from data_loader import get_data
 from ui_handler import generate_network_map, generate_dynamic_plot
 import sys
+from MarkerJS import MarkerJS
+
+
 
 class LEGO_GPT:
     """
@@ -98,6 +101,7 @@ class LEGO_GPT:
 
 
         self.load_data()  # Load data on initialization
+        self.js_generator = MarkerJS(self.map_options, self.vGenP)  # Create instance of MarkerJS with vGenP data for pie chart sizing
         self.create_app()  # Initialize Dash app
         self.setup_layout()  # Define layout
         self.setup_callbacks()  # Define callbacks
@@ -507,4 +511,3 @@ if __name__ == "__main__":
 
 
 
-### TODO: mak eglobal scaling from the data

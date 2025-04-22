@@ -8,9 +8,7 @@ import random
 from dash import html, dcc
 import dash_leaflet.express as dlx
 import math
-from MarkerJS import MarkerJS
 
-js_generator = MarkerJS()
 
 def generate_network_map(self, selected_period: str, selected_time: int, long_format: bool, zoom_level: int, map_options: dict) -> list:
     """
@@ -141,11 +139,10 @@ def generate_network_map(self, selected_period: str, selected_time: int, long_fo
 
 
 
-    node_layer = generate_node_layer(self.i, self.gi, vGenP_filtered)
+    node_layer = generate_node_layer(self.i, self.gi, vGenP_filtered, self.js_generator)
 
 
     return network_layer, node_layer
-
 
 def filter_dataframe(self, attr_str: str, rp: str, scope: str, local_node: str=None, local_line: str=None, k_range: list=[]) -> pd.DataFrame:
     """
@@ -300,7 +297,7 @@ def generate_dynamic_plot(self, x_axis: str, y_axis: str, line_idx: str, node_id
     return html.Div([dcc.Graph(figure=fig, id="dynamic-plot" + str(random.randint(0, 1000)), style={'height': '100%', 'width': '100%'})],
                     style={'flex': '1', 'min-width': '0', 'height': '90vh', 'margin-top': '0px'})
 
-def generate_node_layer(buses: pd.DataFrame, gi: pd.DataFrame, vGenP_filtered: pd.DataFrame) -> dl.GeoJSON:
+def generate_node_layer(buses: pd.DataFrame, gi: pd.DataFrame, vGenP_filtered: pd.DataFrame, js_generator: object) -> dl.GeoJSON:
 
     # merge vGenP and gi on g for pie chart plots
     merged = pd.merge(vGenP_filtered, gi, on="g", how="left")
@@ -377,7 +374,7 @@ def generate_node_layer(buses: pd.DataFrame, gi: pd.DataFrame, vGenP_filtered: p
         format='geobuf',
         cluster=True,
         zoomToBoundsOnClick=True,
-        superClusterOptions=dict(radius=40, maxZoom=16),
+        superClusterOptions=dict(radius=60, maxZoom=16),
         pointToLayer=js_generator.pointToLayer(),
         clusterToLayer=js_generator.clusterToLayer(),
     )
