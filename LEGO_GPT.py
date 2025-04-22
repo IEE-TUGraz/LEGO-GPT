@@ -504,3 +504,7 @@ if __name__ == "__main__":
     else:
         # Run with specified config
         LEGO_GPT(config_path=config_path).run()
+
+
+
+### TODO: mak eglobal scaling from the data
