@@ -3,8 +3,7 @@ channels:
   - defaults
   - conda-forge
 dependencies:
-  - dash=2.18.2
-  - dash-leaflet=1.0.15
+  - dash=3.0.3
   - matplotlib=3.10.1
   - narwhals=1.32.0
   - openpyxl=3.1.5
@@ -24,11 +23,13 @@ dependencies:
 
   # Anything not available on conda
   - pip:
-      - sphinx_rtd_theme
-      - roman-numerals
-      - myst-parser
-      - sphinx-autobuild
-      - docutils
+      - sphinx_rtd_theme==3.0.2
+      - roman-numerals==3.1.0
+      - myst-parser==4.0.1
+      - sphinx-autobuild==2024.10.3
+      - docutils==0.21.2
+      - dash-leaflet==1.1.1
+      - dash-extensions==2.0.4
   
   
 
