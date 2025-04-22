@@ -8,56 +8,35 @@ import random
 from dash import html, dcc
 import dash_leaflet.express as dlx
 import math
+import warnings  # Add this import at the top of the file
 
 
-def generate_network_map(self, selected_period: str, selected_time: int, long_format: bool, zoom_level: int, map_options: dict) -> list:
+
+def generate_network_map(self, selected_period: str, selected_time: int, zoom_level: int) -> tuple:
     """
     Generates a network map visualization using power flow data and bus locations.
     
     Args:
-        vLineP (pd.DataFrame): DataFrame containing power flow data with columns:
-            - "i": Starting bus ID of the line.
-            - "j": Ending bus ID of the line.
-            - "values": Power flow values.
-            - "rel_values": Relative power flow values (used for color mapping).
-            - "line": Line IDs.
-            - "k": Time step identifier.
-            - "rp": Period identifier.
-            - "pPmax": Line rating (maximum power capacity).
-
-        buses (pd.DataFrame): DataFrame containing bus location data with columns:
-            - "lat": Latitude of the bus.
-            - "lon": Longitude of the bus.
-
         selected_period (str): The selected period identifier for filtering the data.
         selected_time (int): The selected time step identifier for filtering the data.
-        long_format (bool): Whether the data is in long format (only filter by time) or not.
         zoom_level (int): The current zoom level of the map.
 
-        map_options (dict): Dictionary containing map configuration options:
-            - "line_weight": Line thickness for the polylines.
-            - "arrow_zoom_scale": Scaling factor for arrow sizes based on zoom level.
-            - "arrow_min_size": Minimum size for arrows.
-            - "node_zoom_scale": Scaling factor for node sizes based on zoom level.
-            - "node_min_size": Minimum size for nodes.
-            - "default_zoom": Default zoom level if none is provided.
-
     Returns:
-        list: A list of Dash Leaflet components representing the network map, including:
-            - A tile layer for the map background.
-            - A layer group containing arrows (power flow directions) and circles (bus nodes).
+        tuple: A tuple of Dash Leaflet components representing the network map, including:
+            - A list of polylines representing power lines with arrows indicating power flow direction.
+            - A node layer representing bus locations with pie charts for power generation.
 
     """
     selected_time = f"k{selected_time:04d}"
     # Use config values
-    line_weight = map_options["line_weight"]
-    arrow_scale = map_options["arrow_zoom_scale"]
-    arrow_min = map_options["arrow_min_size"]
-    node_scale = map_options["node_zoom_scale"]
-    node_min = map_options["node_min_size"]
-    default_zoom = map_options["default_zoom"]
+    line_weight = self.map_options["line_weight"]
+    arrow_scale = self.map_options["arrow_zoom_scale"]
+    arrow_min = self.map_options["arrow_min_size"]
+    default_zoom = self.map_options["default_zoom"]
+    technology_colors = self.map_options["technology_colors"]
+    cluster_options = self.map_options["cluster_options"]
 
-    if long_format:
+    if self.long_format:
         vLineP_filtered = self.vLineP[self.vLineP["k"] == selected_time]
         vGenP_filtered = self.vGenP[self.vGenP["k"] == selected_time]
     else:
@@ -139,7 +118,7 @@ def generate_network_map(self, selected_period: str, selected_time: int, long_fo
 
 
 
-    node_layer = generate_node_layer(self.i, self.gi, vGenP_filtered, self.js_generator)
+    node_layer = generate_node_layer(self.i, self.gi, vGenP_filtered, self.js_generator, technology_colors, cluster_options)
 
 
     return network_layer, node_layer
@@ -297,7 +276,23 @@ def generate_dynamic_plot(self, x_axis: str, y_axis: str, line_idx: str, node_id
     return html.Div([dcc.Graph(figure=fig, id="dynamic-plot" + str(random.randint(0, 1000)), style={'height': '100%', 'width': '100%'})],
                     style={'flex': '1', 'min-width': '0', 'height': '90vh', 'margin-top': '0px'})
 
-def generate_node_layer(buses: pd.DataFrame, gi: pd.DataFrame, vGenP_filtered: pd.DataFrame, js_generator: object) -> dl.GeoJSON:
+def generate_node_layer(buses: pd.DataFrame, gi: pd.DataFrame, vGenP_filtered: pd.DataFrame, js_generator: object, technology_colors: dict, cluster_options: dict) -> dl.GeoJSON:
+    """
+    Generates a GeoJSON layer for visualizing nodes with pie chart plots based on input data.
+    Args:
+        buses (pd.DataFrame): DataFrame containing bus information, including latitude and longitude.
+        gi (pd.DataFrame): DataFrame containing generator information, including connected bus and technology type.
+        vGenP_filtered (pd.DataFrame): Filtered DataFrame containing generation data to be visualized.
+        js_generator (object): Object providing JavaScript functions for customizing point and cluster layers.
+        technology_colors (dict): Dictionary mapping technology names to their corresponding colors.
+    Returns:
+        dl.GeoJSON: A Dash Leaflet GeoJSON layer with clustered nodes and pie chart visualizations.
+    Notes:
+        - The function merges and processes the input data to prepare it for visualization.
+        - Rows with missing latitude, longitude, or zero total values are skipped.
+        - The resulting GeoJSON layer supports clustering and custom rendering of points and clusters.
+        - The size scaling is based on total generation values, with a minimum size defined by the user.
+    """
 
     # merge vGenP and gi on g for pie chart plots
     merged = pd.merge(vGenP_filtered, gi, on="g", how="left")
@@ -310,39 +305,26 @@ def generate_node_layer(buses: pd.DataFrame, gi: pd.DataFrame, vGenP_filtered: p
     pivoted.reset_index(inplace=True)
     pivoted = pivoted.merge(buses, left_on="i", right_on="values", how="left")
 
-    # ---------------------------------------
-    # Category colors
-    # ---------------------------------------
-    category_colors = {
-        "Wind": "#2ecc71",
-        "Solar": "#27ae60",
-        "OtherRES": "#1e8449",
-        "Offshore": "#145a32",
-        "CSP": "#117a65",
-        "Coal": "#c0392b",
-        "Gas": "#e74c3c",
-        "Oil": "#a93226",
-        "OtherNoRES": "#922b21",
-        "Nuclear": "#7b241c",
-        "HS": "#3498db",
-        "HPS": "#2e86c1",
-        "RoR": "#21618c",
-        "BESS": "#7f8c8d",
-    }
-
-    # ---------------------------------------
+    
     # Prepare GeoJSON input
-    # ---------------------------------------
     geo_data = []
     max_total = 0
     for _, row in pivoted.iterrows():
         values = []
         colors = []
+        labels = []
         total = 0
         for tec, val in row.items():
-            if tec in category_colors and val > 0:
-                values.append(round(val, 1))  # round values to 1 decimal place                
-                colors.append(category_colors[tec])
+            if tec == "i" or tec == "lat" or tec == "lon":
+                continue  # skip the index and coordinates columns
+            if val > 0:
+                if tec not in technology_colors:
+                    colors.append("#808080")  # default color for unknown technology
+                    warnings.warn(f"Undefined technology: {tec}. Please check the technology_colors mapping in the config file. Setting color to grey.")
+                else:
+                    colors.append(technology_colors[tec])
+                values.append(round(val, 1))  # round values to 1 decimal place       
+                labels.append(tec)         
                 total += val
 
         if total == 0 or pd.isna(row["lat"]) or pd.isna(row["lon"]):
@@ -355,7 +337,7 @@ def generate_node_layer(buses: pd.DataFrame, gi: pd.DataFrame, vGenP_filtered: p
             name=row["i"],
             values=values,
             colors=colors,
-            labels=[tec for tec, val in row.items() if tec in category_colors and val > 0]
+            labels=labels,
         ))
 
         max_total = max(max_total, total)
@@ -363,18 +345,14 @@ def generate_node_layer(buses: pd.DataFrame, gi: pd.DataFrame, vGenP_filtered: p
     geojson = dlx.dicts_to_geojson(geo_data)
     geobuf = dlx.geojson_to_geobuf(geojson)
 
-
- 
-    # ---------------------------------------
     # Return GeoJSON layer
-    # ---------------------------------------
     return dl.GeoJSON(
         id="node-layer",                     
         data=geobuf,
         format='geobuf',
         cluster=True,
         zoomToBoundsOnClick=True,
-        superClusterOptions=dict(radius=60, maxZoom=16),
+        superClusterOptions=dict(radius=cluster_options["cluster_radius"], maxZoom=cluster_options["maxZoom"]),
         pointToLayer=js_generator.pointToLayer(),
         clusterToLayer=js_generator.clusterToLayer(),
     )
