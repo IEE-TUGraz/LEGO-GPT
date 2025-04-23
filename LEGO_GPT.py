@@ -425,8 +425,7 @@ class LEGO_GPT:
         )
         def store_last_clicked_node(click_data):
             if not click_data:
-                return None
-            print(click_data)
+                return dash.no_update
             clicked_id = click_data["properties"]["id"]
             print(f"Clicked node: {clicked_id}")
             return clicked_id
