@@ -119,6 +119,7 @@ class LEGO_GPT:
         Ensure that the required data sources are accessible and properly formatted.
         """
         get_data(self)
+        print([node.Index for node in self.i.itertuples(index=True)])
         
     def create_app(self):
         """
@@ -335,7 +336,7 @@ class LEGO_GPT:
                     dl.Map(children=[
                         dl.TileLayer(url='https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
                                      attribution='&copy; <a href="https://carto.com/">CARTO</a>'),
-                        dl.LayerGroup(id="network-layer"),
+                        html.Div(id="network-layer"),
                         html.Div(id="node-wrapper"),
                     ], bounds=self.bounds, style={'height': '100%', 'width': '100%', 'background-color': '#6BA3A3'}, id="network-map",
                     zoom=self.map_options["default_zoom"], center=[np.mean(self.i['lat']), np.mean(self.i['lon'])]),
@@ -416,6 +417,7 @@ class LEGO_GPT:
                 return None
             
             clicked_id = ctx.triggered[0]['prop_id'].split('.')[0]
+            print(f"Clicked line: {clicked_id}")
             return clicked_id
 
         @self.app.callback(
@@ -426,6 +428,7 @@ class LEGO_GPT:
             if not ctx.triggered:
                 return None
             clicked_id = ctx.triggered[0]['prop_id'].split('.')[0]
+            print(f"Clicked node: {clicked_id}")
             return clicked_id
         
         @self.app.callback(

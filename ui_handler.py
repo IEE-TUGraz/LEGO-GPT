@@ -3,8 +3,9 @@ import dash_leaflet as dl
 import matplotlib.pyplot as plt
 import pandas as pd
 import random
+import uuid  
+
 import plotly.express as px
-import random
 from dash import html, dcc
 import dash_leaflet.express as dlx
 import math
@@ -91,7 +92,7 @@ def generate_network_map(self, selected_period: str, selected_time: int, zoom_le
             positions=i_pos,
             color=color,
             weight=line_weight,
-            id=f"line-{line_id}_{random.randint(0, 1000)}",  # Add random ID to force update, builds computational load over time
+            id=f"{line_id}",  
             children=[
             dl.Popup(f"Power Flow: {abs(flow_val):.1f} MW, Line rating: {vLineP_filtered.iloc[idx]['pPmax']:.1f} MW")
             ],       
@@ -115,6 +116,10 @@ def generate_network_map(self, selected_period: str, selected_time: int, zoom_le
 
         # Append both line and arrow as top-level items
         network_layer.extend([polyline_decorator, polyline_line])
+        # make network layer as a dl.LayerGroup
+
+
+    network_layer = dl.LayerGroup(children=network_layer, id="network-layer-" + str(uuid.uuid4()), n_clicks=0)
 
 
 
@@ -245,8 +250,8 @@ def generate_dynamic_plot(self, x_axis: str, y_axis: str, line_idx: str, node_id
 
         elif x_axis == "generator" and y_axis == "dispatch":
             x_label = "Generator"
-            y_df["k"] = y_df["k"].astype(str)
-            y_df["g"] = y_df["g"].astype(str)
+            y_df["k"] = y_df["k"].astype(str).copy()
+            y_df["g"] = y_df["g"].astype(str).copy()
             y_df["values"] = pd.to_numeric(y_df["values"], errors="coerce")
             title = "Global dispatch for each generator" if scope == "Global" else f"Local dispatch for {node_idx}"
             fig = px.bar(y_df, x="g", y="values", color="g", title=title, labels={"g": x_label, "values": "Dispatch", "k": "Time"},
@@ -264,7 +269,7 @@ def generate_dynamic_plot(self, x_axis: str, y_axis: str, line_idx: str, node_id
 
     fig.update_layout(**self.graph_options["layout"])
 
-    return html.Div([dcc.Graph(figure=fig, id="dynamic-plot" + str(random.randint(0, 1000)), style={'height': '100%', 'width': '100%'}, config=self.graph_options["graph_save_options"])],
+    return html.Div([dcc.Graph(figure=fig, id="dynamic-plot", style={'height': '100%', 'width': '100%'}, config=self.graph_options["graph_save_options"])],
                     style={'flex': '1', 'min-width': '0', 'height': '90vh', 'margin-top': '0px'})
 
 def generate_node_layer(buses: pd.DataFrame, gi: pd.DataFrame, vGenP_filtered: pd.DataFrame, js_generator: object, technology_colors: dict, cluster_options: dict) -> dl.GeoJSON:
