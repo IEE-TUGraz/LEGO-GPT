@@ -221,6 +221,7 @@ def generate_dynamic_plot(self, x_axis: str, y_axis: str, line_idx: str, node_id
     fig = None
     y_df = None
     k_range = [str(f"k{time:04d}") for time in range(time_range[0], time_range[1] + 1)] if self.long_format else self.k["values"].values.tolist()
+    color_sequence = self.graph_options["colors"]
 
     if y_axis == "demand":
         y_df = filter_dataframe(self, "pDemandP", rp=selected_period, scope=scope, local_node=node_idx, k_range=k_range)
@@ -234,13 +235,13 @@ def generate_dynamic_plot(self, x_axis: str, y_axis: str, line_idx: str, node_id
             x_label = "Time"
             if y_axis == "dispatch":
                 title = "Global dispatch over time" if scope == "Global" else f"Local dispatch for {node_idx} over time"
-                fig = px.area(y_df, x="k", y="values", color="g", title=title, labels={"k": x_label, "values": "Dispatch", "g": "Generator"})
+                fig = px.area(y_df, x="k", y="values", color="g", title=title, labels={"k": x_label, "values": "Dispatch", "g": "Generator"}, color_discrete_sequence=color_sequence,)
             elif y_axis == "demand":
-                fig = px.line(y_df, x="k", y="values", title="Demand Over Time", labels={"i": x_label, "values": "Demand"})
+                fig = px.line(y_df, x="k", y="values", title="Demand Over Time", labels={"i": x_label, "values": "Demand"}, color_discrete_sequence=color_sequence,)
             elif y_axis == "power_flow":
                 title = "Power Flow over time" if scope == "Global" else f"Local Power Flow for {line_idx} over time"
                 fig = px.line(y_df, x="k", y="values", color="line", title=title, labels={"k": x_label, "values": "Power Flow", "line": "Line"},
-                              hover_data={"values": True, "line": True, "i": True, "j": True})
+                              hover_data={"values": True, "line": True, "i": True, "j": True}, color_discrete_sequence=color_sequence,)
 
         elif x_axis == "generator" and y_axis == "dispatch":
             x_label = "Generator"
@@ -249,31 +250,21 @@ def generate_dynamic_plot(self, x_axis: str, y_axis: str, line_idx: str, node_id
             y_df["values"] = pd.to_numeric(y_df["values"], errors="coerce")
             title = "Global dispatch for each generator" if scope == "Global" else f"Local dispatch for {node_idx}"
             fig = px.bar(y_df, x="g", y="values", color="g", title=title, labels={"g": x_label, "values": "Dispatch", "k": "Time"},
-                         hover_data={"values": False, "k": False})
+                         hover_data={"values": False, "k": False}, color_discrete_sequence=color_sequence)
 
         elif x_axis == "line" and y_axis == "power_flow":
             x_label = "Line"
             title = "Power Flow Distribution over all Lines" if scope == "Global" else f"Local Power Flow Distribution for {line_idx}"
             fig = px.histogram(y_df, x="values", color="line", title=title, nbins=10,
-                               range_x=[self.vLineP_min, self.vLineP_max])
+                               range_x=[self.vLineP_min, self.vLineP_max], color_discrete_sequence=color_sequence)
 
     if fig is None:
         fig = px.scatter(title="Select a valid combination for the plot")
 
-    fig.update_layout(title_x=0.5)
-    fig.update_layout(
-        xaxis=dict(domain=[0, 0.85]),
-        yaxis=dict(domain=[0, 1]),
-        legend=dict(x=0.85, y=1, xanchor="left", yanchor="top"),
-        margin=dict(l=0, r=40, t=40, b=40),
-        paper_bgcolor="#E1EDED",
-        plot_bgcolor="#E1EDED",
-        font_size=14,
-        xaxis_title_font=dict(size=18, color='black'),
-        yaxis_title_font=dict(size=18, color='black')
-    )
 
-    return html.Div([dcc.Graph(figure=fig, id="dynamic-plot" + str(random.randint(0, 1000)), style={'height': '100%', 'width': '100%'})],
+    fig.update_layout(**self.graph_options["layout"])
+
+    return html.Div([dcc.Graph(figure=fig, id="dynamic-plot" + str(random.randint(0, 1000)), style={'height': '100%', 'width': '100%'}, config=self.graph_options["graph_save_options"])],
                     style={'flex': '1', 'min-width': '0', 'height': '90vh', 'margin-top': '0px'})
 
 def generate_node_layer(buses: pd.DataFrame, gi: pd.DataFrame, vGenP_filtered: pd.DataFrame, js_generator: object, technology_colors: dict, cluster_options: dict) -> dl.GeoJSON:

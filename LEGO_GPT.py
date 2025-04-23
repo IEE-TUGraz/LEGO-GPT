@@ -94,6 +94,7 @@ class LEGO_GPT:
         self.dropdown_options_y = config["dropdown_options_y"]
         self.dropdown_options_x = config["dropdown_options_x"]
         self.map_options = config["map_options"]
+        self.graph_options = config["graph_options"]
 
         if self.input_type not in ["excel", "sqlite", "V2G"]:
             raise ValueError("Invalid input type. Please choose either 'excel', 'sqlite' or V2G.")
