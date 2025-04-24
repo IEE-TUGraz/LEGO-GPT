@@ -422,12 +422,12 @@ class LEGO_GPT:
 
         @self.app.callback(
             Output("last-clicked-node", "data"),
-            [Input(node.Index, "n_clicks") for node in self.i.itertuples(index=True)]
-        )
-        def store_last_clicked_node(*args):
-            if not ctx.triggered:
-                return None
-            clicked_id = ctx.triggered[0]['prop_id'].split('.')[0]
+            Input("node-layer", "clickData"),        
+            )
+        def store_last_clicked_node(click_data):
+            if not click_data:
+                return dash.no_update
+            clicked_id = click_data["properties"]["id"]
             print(f"Clicked node: {clicked_id}")
             return clicked_id
         
