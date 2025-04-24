@@ -51,7 +51,7 @@ def get_data(obj, ):
         # print out all tables in the database
         cursor = conn.cursor()
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
-        # print(cursor.fetchall())
+        print(cursor.fetchall())
 
 
         for table in self.tables:
@@ -72,9 +72,23 @@ def get_data(obj, ):
             self.g.drop(columns=["index"], inplace=True)
             self.g.rename(columns={"0": "values"}, inplace=True)
         if "gi" in self.tables:
+
+            self.gi.drop(columns=["index"], inplace=True)
             self.gi.rename(columns={"0": "g"}, inplace=True)
             self.gi.rename(columns={"1": "i"}, inplace=True)
-            self.gi.drop(columns=["index"], inplace=True)
+        if "thermalGenerators" in self.tables: # NOTE define those in the config as tec categories?
+            self.thermalGenerators.drop(columns=["index"], inplace=True)
+            self.thermalGenerators.rename(columns={"0": "g"}, inplace=True)
+        if "rorGenerators" in self.tables:
+            self.rorGenerators.drop(columns=["index"], inplace=True)
+            self.rorGenerators.rename(columns={"0": "g"}, inplace=True)
+        if "vresGenerators" in self.tables:
+            self.vresGenerators.drop(columns=["index"], inplace=True)
+            self.vresGenerators.rename(columns={"0": "g"}, inplace=True)
+        if "storageUnits" in self.tables:
+            self.storageUnits.drop(columns=["index"], inplace=True)
+            self.storageUnits.rename(columns={"0": "g"}, inplace=True)
+
         if "la" in self.tables:
             self.la.drop(columns=["index"], inplace=True)
             self.la.rename(columns={"0": "i"}, inplace=True)
@@ -100,8 +114,27 @@ def get_data(obj, ):
                         # Update the corresponding row in vLineP
                         self.vLineP.at[row_idx, "line"] = str(int(idx))  # Use row index from enumerate
                         break  # Stop searching once a match is found
+
         self.coords = h.load_lat_lon(self.input_dir)
-        
+
+        # add tec to self.gi
+        tec = []
+        for generator in self.gi.itertuples(index=True):
+            # get the generator name
+            g = generator.g
+
+            if hasattr(self, "thermalGenerators") and g in self.thermalGenerators.values:
+                tec.append("thermal")
+            elif hasattr(self, "rorGenerators") and g in self.rorGenerators.values:
+                tec.append("RoR")
+            elif hasattr(self, "vresGenerators") and g in self.vresGenerators.values:
+                tec.append("vres")
+            elif hasattr(self, "storageUnits") and g in self.storageUnits.values:
+                tec.append("storage")
+            else:
+                tec.append("unknown")
+        self.gi["tec"] = tec
+
     elif self.input_type == "excel":
         fast=False
         if not fast:
@@ -121,7 +154,6 @@ def get_data(obj, ):
                     # load the data as variable with the table name
                     setattr(self, table, h.extract_excel_to_dataframe(self.input_dir, table))
             self.coords = h.extract_excel_to_dataframe(self.input_dir, "coords")
-
 
             # only take values where duplicate is False
             self.vLineP = self.vLineP[self.vLineP["duplicate"] == False].copy()
@@ -168,6 +200,7 @@ def get_data(obj, ):
                 #     self.vStInterRes.to_sql(table, conn, if_exists="replace", index=False)
 
             self.coords.to_sql("coords", conn, if_exists="replace", index=False)    
+
         else:
             # load from the database
             # connect to the database
@@ -179,7 +212,6 @@ def get_data(obj, ):
 
             # set value column of vGenP to float type
             self.vGenP["values"] = self.vGenP["values"].astype(float)
-
 
     elif self.input_type == "V2G":
 
