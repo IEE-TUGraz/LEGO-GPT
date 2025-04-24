@@ -10,7 +10,6 @@
 *.cmd
 *.~log
 *.gms
-*.js
 # GAMS project file
 *.gsp
 
