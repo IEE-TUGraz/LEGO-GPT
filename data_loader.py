@@ -103,7 +103,7 @@ def get_data(obj, ):
         self.coords = h.load_lat_lon(self.input_dir)
         
     elif self.input_type == "excel":
-        fast=True
+        fast=False
         if not fast:
             for table in self.tables:
                 print(f"Loading table {table}...")
@@ -155,6 +155,8 @@ def get_data(obj, ):
                 elif table == "vGenP":
                     # save the vGenP dataframe to the database
                     self.vGenP.to_sql(table, conn, if_exists="replace", index=False)
+                    self.vGenP["values"] = self.vGenP["values"].astype(float)
+
                 elif table == "pDemandP":
                     # save the pDemandP dataframe to the database
                     self.pDemandP.to_sql(table, conn, if_exists="replace", index=False)
@@ -177,10 +179,6 @@ def get_data(obj, ):
 
             # set value column of vGenP to float type
             self.vGenP["values"] = self.vGenP["values"].astype(float)
-
-
-
-
 
 
     elif self.input_type == "V2G":
