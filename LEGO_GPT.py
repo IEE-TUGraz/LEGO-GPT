@@ -119,7 +119,6 @@ class LEGO_GPT:
         Ensure that the required data sources are accessible and properly formatted.
         """
         get_data(self)
-        print([node.Index for node in self.i.itertuples(index=True)])
         
     def create_app(self):
         """
