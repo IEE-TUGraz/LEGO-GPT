@@ -2,6 +2,7 @@ input_type: excel # excel or sqlite
 input_dir: PATH TO LEGO RESULTS
 
 tables:
+  - rp
   - k
   - i
   - g
@@ -10,6 +11,10 @@ tables:
   - vLineP
   - vGenP
   - pPmax
+  - thermalGenerators # only for LEGO pyomo needed
+  - rorGenerators # only for LEGO pyomo needed
+  - vresGenerators # only for LEGO pyomo needed
+  - storageUnits # only for LEGO pyomo needed
 
 dropdown_options_y:
   - label: "Y: Dispatch"
@@ -52,10 +57,16 @@ map_options:
     BESS: "#7f8c8d"
     V2G_charging: "#8e44ad"
     V2G_discharging: "#9b59b6"
+    unknown: "#808080"
+    no_generation: "#000000"
+    vres: "#2ecc71"
+    thermal: "#c0392b"
+    storage: "#7f8c8d"
   
   cluster_options:
     cluster_radius: 60
     maxZoom: 16
+
 
 graph_options:
   graph_save_options:
@@ -116,5 +127,7 @@ graph_options:
   - "#FD79A8"
   - "#81ECEC"
   - "#0984E3"
+
+   
 
     
