@@ -6,7 +6,6 @@ class MarkerJS:
 
     def __init__(self, map_options: dict, vGenP: pd.DataFrame):
         self.scale_factor = 1 / (np.sqrt(vGenP['values']).mean() )
-        print(f"Scale factor: {self.scale_factor:.6f}")
         self.min_radius = map_options["pie_chart_min_radius"]
 
     @staticmethod
