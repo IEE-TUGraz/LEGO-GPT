@@ -10,7 +10,7 @@
 *.cmd
 *.~log
 *.gms
-
+*.js
 # GAMS project file
 *.gsp
 
@@ -44,3 +44,4 @@ testing.py
 
 config.yml
 /docs/build
+
