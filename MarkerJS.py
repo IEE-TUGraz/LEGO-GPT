@@ -54,19 +54,25 @@ class MarkerJS:
                 values: [10, 10, 10],
                 colors: ['green', 'orange', 'red']
             }, opt);
-
             const sum = opt.values.reduce((a, b) => a + b, 0);
             let startAngle = 0;
             let paths = '';
 
-            for (let i = 0; i < opt.values.length; i++) {
-                const sliceAngle = (opt.values[i] / sum) * 360;
-                const endAngle = startAngle + sliceAngle;
-                const isFullCircle = sliceAngle === 360;
-                const d = describeSlice(opt.width / 2, opt.height / 2, opt.radius, startAngle, endAngle, isFullCircle);
-                paths += `<path fill="${opt.colors[i % opt.colors.length]}" d="${d}"></path>`;
-                startAngle = endAngle;
+            if (sum === 0) {
+                // Draw a placeholder circle (e.g., gray full circle)
+                const d = describeSlice(opt.width / 2, opt.height / 2, opt.radius, 0, 360, true);
+                paths += `<path fill="${opt.colors[0]}" d="${d}"></path>`;
+            } else {
+                for (let i = 0; i < opt.values.length; i++) {
+                    const sliceAngle = (opt.values[i] / sum) * 360;
+                    const endAngle = startAngle + sliceAngle;
+                    const isFullCircle = sliceAngle === 360;
+                    const d = describeSlice(opt.width / 2, opt.height / 2, opt.radius, startAngle, endAngle, isFullCircle);
+                    paths += `<path fill="${opt.colors[i % opt.colors.length]}" d="${d}"></path>`;
+                    startAngle = endAngle;
+                }
             }
+
 
             return `<svg width="${opt.width}" height="${opt.height}">${paths}</svg>`;
         }

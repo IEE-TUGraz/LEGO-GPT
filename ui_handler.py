@@ -301,10 +301,24 @@ def generate_node_layer(buses: pd.DataFrame, gi: pd.DataFrame, vGenP_filtered: p
     pivoted.reset_index(inplace=True)
     pivoted = pivoted.merge(buses, left_on="i", right_on="values", how="left")
 
+    # check if any bus from set i is missing in column i
+    missing_buses =  set(buses.index) - set(pivoted["i"]) 
+    if missing_buses:
+        # append the missing buses with their coordinates and 0 values
+        for bus in missing_buses:
+            lat = buses.loc[buses.index == bus, "lat"].values[0]
+            lon = buses.loc[buses.index == bus, "lon"].values[0]
+            pivoted = pd.concat([pivoted, pd.DataFrame([{"i": bus, "lat": lat, "lon": lon}])], ignore_index=True)
     
+    if "unknown" not in technology_colors.keys():
+        # Add a default color for unknown technologies
+        technology_colors["unknown"] = "#808080"  # grey color
+    if "no_generation" not in technology_colors.keys():
+        # Add black as default color for no generation
+        technology_colors["no_generation"] = "#000000"  # black color
+
     # Prepare GeoJSON input
     geo_data = []
-    max_total = 0
     for _, row in pivoted.iterrows():
         values = []
         colors = []
@@ -315,7 +329,7 @@ def generate_node_layer(buses: pd.DataFrame, gi: pd.DataFrame, vGenP_filtered: p
                 continue  # skip the index and coordinates columns
             if val > 0:
                 if tec not in technology_colors:
-                    colors.append("#808080")  # default color for unknown technology
+                    colors.append(technology_colors["unknown"])  # default color for unknown technology
                     warnings.warn(f"Undefined technology: {tec}. Please check the technology_colors mapping in the config file. Setting color to grey.")
                 else:
                     colors.append(technology_colors[tec])
@@ -323,8 +337,15 @@ def generate_node_layer(buses: pd.DataFrame, gi: pd.DataFrame, vGenP_filtered: p
                 labels.append(tec)         
                 total += val
 
-        if total == 0 or pd.isna(row["lat"]) or pd.isna(row["lon"]):
-            continue  # skip empty or invalid rows
+        if pd.isna(row["lat"]) or pd.isna(row["lon"]):
+            print(f"Warning: Missing coordinates for bus {row['i']}.")
+            continue  #  invalid rows
+        if total <= 0:
+            print(f"Warning: No generation data for bus {row['i']}.")
+            # make a pie chart with 0 values
+            values = [0]
+            colors = [technology_colors["no_generation"]]
+            labels = ["No Generation"]
 
         geo_data.append(dict(
             id=row["i"],
@@ -335,8 +356,6 @@ def generate_node_layer(buses: pd.DataFrame, gi: pd.DataFrame, vGenP_filtered: p
             colors=colors,
             labels=labels,
         ))
-
-        max_total = max(max_total, total)
 
     geojson = dlx.dicts_to_geojson(geo_data)
     geobuf = dlx.geojson_to_geobuf(geojson)
