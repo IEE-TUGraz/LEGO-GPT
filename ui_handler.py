@@ -289,7 +289,6 @@ def generate_node_layer(buses: pd.DataFrame, gi: pd.DataFrame, vGenP_filtered: p
         - The resulting GeoJSON layer supports clustering and custom rendering of points and clusters.
         - The size scaling is based on total generation values, with a minimum size defined by the user.
     """
-
     # merge vGenP and gi on g for pie chart plots
     merged = pd.merge(vGenP_filtered, gi, on="g", how="left")
     grouped = (
@@ -300,7 +299,6 @@ def generate_node_layer(buses: pd.DataFrame, gi: pd.DataFrame, vGenP_filtered: p
     pivoted = grouped.pivot(index="i", columns="tec", values="values").fillna(0)
     pivoted.reset_index(inplace=True)
     pivoted = pivoted.merge(buses, left_on="i", right_on="values", how="left")
-
     # check if any bus from set i is missing in column i
     missing_buses =  set(buses.index) - set(pivoted["i"]) 
     if missing_buses:
@@ -338,10 +336,10 @@ def generate_node_layer(buses: pd.DataFrame, gi: pd.DataFrame, vGenP_filtered: p
                 total += val
 
         if pd.isna(row["lat"]) or pd.isna(row["lon"]):
-            print(f"Warning: Missing coordinates for bus {row['i']}.")
+            # print(f"Warning: Missing coordinates for bus {row['i']}.")
             continue  #  invalid rows
         if total <= 0:
-            print(f"Warning: No generation data for bus {row['i']}.")
+            # print(f"Warning: No generation data for bus {row['i']}.")
             # make a pie chart with 0 values
             values = [0]
             colors = [technology_colors["no_generation"]]
