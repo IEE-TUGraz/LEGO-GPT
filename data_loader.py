@@ -51,7 +51,7 @@ def get_data(obj, ):
         # print out all tables in the database
         cursor = conn.cursor()
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
-        print(cursor.fetchall())
+        # print(cursor.fetchall())
 
 
         for table in self.tables:
@@ -134,7 +134,6 @@ def get_data(obj, ):
             else:
                 tec.append("unknown")
         self.gi["tec"] = tec
-
     elif self.input_type == "excel":
         fast=False
         if not fast:
@@ -326,6 +325,121 @@ def get_data(obj, ):
                 self.pPmax.drop(row_idx, inplace=True)
         # reset index
         self.pPmax.reset_index(drop=True, inplace=True)
+
+
+        # create gi dataframe
+        self.gi = pd.DataFrame(columns=["g", "i", "tec"])
+
+        # add PV generators
+        pv_generators = []
+        if hasattr(self, "PV_Buses"):
+            # rename the columns
+            self.PV_Buses.rename(columns={"0": "i"}, inplace=True)
+            # drop the index column
+            self.PV_Buses.drop(columns=["index"], inplace=True)
+            for row_idx, row in enumerate(self.PV_Buses.itertuples(index=True)):
+                # get the generator name
+                g = row.i + "_PV"
+                # get the bus name
+                i = row.i
+                # get tec
+                tec = "Solar"
+                # add to the list
+                pv_generators.append([g, i, tec])
+
+        # add wind generators
+        wind_generators = []
+        if hasattr(self, "Wind_Buses"):
+            # rename the columns
+            self.Wind_Buses.rename(columns={"0": "i"}, inplace=True)
+            # drop the index column
+            self.Wind_Buses.drop(columns=["index"], inplace=True)
+            for row_idx, row in enumerate(self.Wind_Buses.itertuples(index=True)):
+                # get the generator name
+                g = row.i + "_Wind"
+                # get the bus name
+                i = row.i
+                # get tec
+                tec = "Wind"
+                # add to the list
+                wind_generators.append([g, i, tec])
+        # add charging buses
+        charging_buses = []
+        if hasattr(self, "Charging_Buses"):
+            # rename the columns
+            self.Charging_Buses.rename(columns={"0": "i"}, inplace=True)
+            # drop the index column
+            self.Charging_Buses.drop(columns=["index"], inplace=True)
+            for row_idx, row in enumerate(self.Charging_Buses.itertuples(index=True)):
+                # get the generator name
+                g = row.i + "_Discharging"
+                # get the bus name
+                i = row.i
+                # get tec
+                tec = "V2G_discharging"
+                # add to the list
+                charging_buses.append([g, i, tec])
+        
+        
+        # put all the generators in one dataframe
+        if hasattr(self, "PV_Buses"):
+            self.gi = pd.concat([self.gi, pd.DataFrame(pv_generators, columns=["g", "i", "tec"])], ignore_index=True)
+        if hasattr(self, "Wind_Buses"):
+            self.gi = pd.concat([self.gi, pd.DataFrame(wind_generators, columns=["g", "i", "tec"])], ignore_index=True)
+        if hasattr(self, "Charging_Buses"):
+            self.gi = pd.concat([self.gi, pd.DataFrame(charging_buses, columns=["g", "i", "tec"])], ignore_index=True)
+        
+        # add all the generation to the vGenP dataframe
+        self.vGenP = pd.DataFrame(columns=["k", "g", "values"]).astype({
+                                                                "k": "str",  # or int, str, etc. — whatever matches your data
+                                                                "g": "str",
+                                                                "values": "float"})
+        pv_production = []
+        if hasattr(self, "vPV_production") and not self.vPV_production.empty:
+            for row_idx, row in enumerate(self.vPV_production.itertuples(index=True)):
+                # get the generator name
+                g = row.PV_Buses + "_PV"
+                # get the time
+                k = row.Time
+                # get the value
+                value = row.values
+
+                # add to the list
+                pv_production.append([k, g, value])
+
+        wind_production = []
+        if hasattr(self, "vWind_production") and not self.vWind_production.empty:
+            for row_idx, row in enumerate(self.vWind_production.itertuples(index=True)):
+                # get the generator name
+                g = row.Wind_Buses + "_Wind"
+                # get the time
+                k = row.Time
+                # get the value
+                value = row.values
+
+                # add to the list
+                wind_production.append([k, g, value])
+        charging_production = []
+        if hasattr(self, "vCharging_production") and not self.vCharging_production.empty:
+            for row_idx, row in enumerate(self.vCharging_production.itertuples(index=True)):
+                # get the generator name
+                g = row.Charging_Buses + "_Discharging"
+                # get the time
+                k = row.Time
+                # get the value
+                value = row.values
+
+                # add to the list
+                charging_production.append([k, g, value])
+        # put all the generators in one dataframe
+        if hasattr(self, "vPV_production") and not self.vPV_production.empty:
+            self.vGenP = pd.concat([self.vGenP, pd.DataFrame(pv_production, columns=["k", "g", "values"])], ignore_index=True)
+        if hasattr(self, "vWind_production") and not self.vWind_production.empty:
+            self.vGenP = pd.concat([self.vGenP, pd.DataFrame(wind_production, columns=["k", "g", "values"])], ignore_index=True)
+        if hasattr(self, "vCharging_production") and not self.vCharging_production.empty:
+            self.vGenP = pd.concat([self.vGenP, pd.DataFrame(charging_production, columns=["k", "g", "values"])], ignore_index=True)
+
+        self.vGenP["k"] = self.vGenP["k"].apply(lambda x: f"k{int(x+1):04d}")
 
     else:
         raise ValueError("Invalid input type. Please choose either 'excel', 'sqlite' or V2G.")
