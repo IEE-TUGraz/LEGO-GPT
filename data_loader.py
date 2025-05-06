@@ -1,3 +1,9 @@
+import os
+import sqlite3
+import pandas as pd
+import helper_functions as h
+
+
 def get_data(obj, ):
     """
     Load and process data from various input sources (SQLite, Excel, or V2G) into the object's attributes.
@@ -38,10 +44,6 @@ def get_data(obj, ):
         obj.tables = ["vLineP", "pPmax", "coords"]
         get_data(obj)
     """
-    import os
-    import sqlite3
-    import pandas as pd
-    import helper_functions as h  # Or whatever your helper module is
 
     self = obj
 
@@ -134,8 +136,12 @@ def get_data(obj, ):
             else:
                 tec.append("unknown")
         self.gi["tec"] = tec
+    
+        # close the connection
+        conn.close()
+    
     elif self.input_type == "excel":
-        fast=False
+        fast=True
         if not fast:
             for table in self.tables:
                 print(f"Loading table {table}...")
@@ -171,7 +177,7 @@ def get_data(obj, ):
                 elif table == "i":
                     self.i.to_sql(table, conn, if_exists="replace", index=False)
                 elif table == "pPmax":
-                    self.pPmax.to_sql(table, conn, if_exists="replace", index=False)
+                    pass
                 elif table == "k":
                     self.k.to_sql(table, conn, if_exists="replace", index=False) 
                 elif table == "g":
@@ -438,8 +444,12 @@ def get_data(obj, ):
             self.vGenP = pd.concat([self.vGenP, pd.DataFrame(wind_production, columns=["k", "g", "values"])], ignore_index=True)
         if hasattr(self, "vCharging_production") and not self.vCharging_production.empty:
             self.vGenP = pd.concat([self.vGenP, pd.DataFrame(charging_production, columns=["k", "g", "values"])], ignore_index=True)
+        print(self.vWind_production)
 
         self.vGenP["k"] = self.vGenP["k"].apply(lambda x: f"k{int(x+1):04d}")
+
+        # close the connection
+        conn.close()
 
     else:
         raise ValueError("Invalid input type. Please choose either 'excel', 'sqlite' or V2G.")
@@ -470,9 +480,7 @@ def get_data(obj, ):
     self.vLineP["pPmax"] = self.vLineP["line"].map(
         self.pPmax.set_index("line")["values"]
     )
-    self.vLineP_max = self.vLineP["values"].max()
-    self.vLineP_min = self.vLineP["values"].min()  
-
+ 
     # Compute bounds for map display
     self.bounds = [
         [min(self.i['lat']), min(self.i['lon'])],
