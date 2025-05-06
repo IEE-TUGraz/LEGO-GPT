@@ -1,10 +1,22 @@
-LEGO_GPT
-========
+LEGO_GPT Package
+================
 
-.. toctree::
-   :maxdepth: 4
+.. automodule:: LEGO_GPT
+   :members:
+   :undoc-members:
+   :show-inheritance:
 
-   LEGO_GPT
-   ui_handler
-   data_loader
-   helper_functions
+.. automodule:: data_loader
+   :members:
+
+.. automodule:: helper_functions
+   :members:
+
+.. automodule:: plot_definitions
+   :members:
+
+.. automodule:: ui_handler
+   :members:
+
+.. automodule:: MarkerJS
+   :members:
