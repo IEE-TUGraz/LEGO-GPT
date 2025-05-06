@@ -8,6 +8,7 @@ from data_loader import get_data
 from ui_handler import generate_network_map, generate_dynamic_plot
 import sys
 from MarkerJS import MarkerJS
+import pandas as pd
 
 
 
@@ -99,7 +100,7 @@ class LEGO_GPT:
         if self.input_type not in ["excel", "sqlite", "V2G"]:
             raise ValueError("Invalid input type. Please choose either 'excel', 'sqlite' or V2G.")
 
-        required_tables = ["i", "la", "vLineP", "pPmax", "k"]
+        required_tables = ["i", "la", "vLineP", "pPmax", "k", "vGenP"]
         missing = [t for t in required_tables if t not in self.tables]
         if missing:
             raise ValueError(f"Missing required table(s): {', '.join(missing)}")
@@ -110,6 +111,7 @@ class LEGO_GPT:
         self.create_app()  # Initialize Dash app
         self.setup_layout()  # Define layout
         self.setup_callbacks()  # Define callbacks
+  
      
     def load_data(self, ):
         """
@@ -117,8 +119,20 @@ class LEGO_GPT:
 
         This method is intended to handle the data loading process. 
         Ensure that the required data sources are accessible and properly formatted.
+        The dataframe containing the data about the buses is modified such that the index is set to "values" for easier indexing.
         """
         get_data(self)
+                # print out the all data attributes of the object
+        print("Data attributes of the object:")
+        for attr in dir(self):
+            if not attr.startswith("__") and not callable(getattr(self, attr)):
+                attr_value = getattr(self, attr)
+                # print the head if it is a dataframe
+                if isinstance(attr_value, (pd.DataFrame, pd.Series)):
+                    print(f"{attr}:\n{attr_value.head()}")
+
+        # set index of self.i to "values" for simpler indexing
+        self.i.set_index("values", inplace=True)
         
     def create_app(self):
         """

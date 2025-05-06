@@ -6,11 +6,19 @@ class MarkerJS:
     """
     MarkerJS is a class designed to generate custom Leaflet markers and clusters with pie chart visualizations. 
     It provides methods to create individual markers and cluster markers, leveraging SVG pie charts to represent data.
+
     Attributes:
-        scale_factor (float): A scaling factor calculated based on the mean of the square root of the 'values' column 
+    -----------
+
+        scale_factor (float): 
+            A scaling factor calculated based on the mean of the square root of the 'values' column 
             in the provided DataFrame.
-        min_radius (float): The minimum radius for the pie chart markers, derived from the provided map options.
+        min_radius (float): 
+            The minimum radius for the pie chart markers, derived from the provided map options.
+
     Methods:
+    --------
+
         pie_svg():
             Returns a JavaScript function as a string that generates an SVG pie chart based on input options.
         pointToLayer():

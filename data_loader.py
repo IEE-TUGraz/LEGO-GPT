@@ -456,9 +456,6 @@ def get_data(obj, ):
 
     # add the coordinates in coords to the i dataframe
     self.i = pd.merge(self.i, self.coords, left_on="values", right_on="values", how="left")
-    # set the index to the values column
-    self.i.set_index("values", inplace=True)
-
 
     # iterate over pPmax and add the line number to the dataframe
     for row_idx, row in enumerate(self.pPmax.itertuples(index=True)):  # Keep index for modification
