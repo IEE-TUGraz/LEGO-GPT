@@ -141,14 +141,14 @@ class LEGO_GPT:
         The layout dynamically adjusts based on the data and configuration provided.
 
         Key Features:
-            - Dropdowns for selecting reporting periods, X-axis, and Y-axis options.
+            - Dropdowns for selecting representative periods, X-axis, and Y-axis options.
             - A slider for selecting time periods, with an optional number input for precise selection.
             - A range slider for selecting a range of time periods when in long format.
             - A map visualization on the left side, displaying network data.
             - A dynamic graph on the right side, which updates based on user interactions.
 
         Components:
-            - Reporting Period Dropdown: Allows selection of a specific reporting period.
+            - Representative Period Dropdown: Allows selection of a specific representative period.
             - Time Slider: Enables navigation through time periods.
             - Time Slider Input: Provides precise input for time periods (visible in long format).
             - Axis Dropdowns: Allows selection of X-axis and Y-axis variables for the graph.

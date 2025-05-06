@@ -60,7 +60,7 @@ def filter_dataframe(self, attr_str: str, rp: str, scope: str, local_node: str=N
     Args:
         attr_str (str): The attribute string specifying which DataFrame to filter.
                         Options include "vGenP", "pDemandP", and "vLineP".
-        rp (str): The reporting period to filter by, applicable when `long_format` is False.
+        rp (str): The representative period to filter by, applicable when `long_format` is False.
         scope (str): The scope of filtering. Options include "Local" and "Global".
                     - "Local": Filters data specific to a local node or line.
                     - "Global": Aggregates data globally (only applicable for "pDemandP").
@@ -76,7 +76,7 @@ def filter_dataframe(self, attr_str: str, rp: str, scope: str, local_node: str=N
 
     Note:
         - The method operates on different DataFrames (`vGenP`, `pDemandP`, `vLineP`) based on `attr_str`.
-        - If `long_format` is False, the DataFrame is filtered by the reporting period (`rp`).
+        - If `long_format` is False, the DataFrame is filtered by the representative period (`rp`).
         - For "pDemandP" with "Global" scope, the data is aggregated by summing over `k` values.
         - For "vGenP" with "Local" scope, filtering is based on the local node's group (`g`).
         - For "vLineP" with "Local" scope, filtering is based on the local line identifier.
