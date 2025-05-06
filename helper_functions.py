@@ -98,7 +98,6 @@ def extract_excel_to_dataframe(input_dir: str, table: str) -> pd.DataFrame:
     Raises:
         FileNotFoundError: If the specified Excel files or sheets are not found.
         ValueError: If the table type is invalid or not supported.
-        
     """
 
     if table == "i":
@@ -280,18 +279,21 @@ def extract_excel_to_dataframe(input_dir: str, table: str) -> pd.DataFrame:
 def copy_default_config(config_path: str="config.yml", default_config_path: str="config_template.yml") -> None:
     """
     Copies a default configuration file to a specified path if it does not already exist.
+
     Args:
-        config_path (str): The path where the configuration file should be created. 
-                           Defaults to "config.yml".
-        default_config_path (str): The path to the default configuration template file. 
-                                   Defaults to "config_template.yml".
+        config_path (str): The path where the configuration file should be created.
+            Defaults to "config.yml".
+        default_config_path (str): The path to the default configuration template file.
+            Defaults to "config_template.yml".
+
     Behavior:
-        - If the file at `config_path` does not exist, the function reads the content of 
+        - If the file at `config_path` does not exist, the function reads the content of
           `default_config_path` and writes it to `config_path`.
-        - If the file at `config_path` already exists, no action is taken, and a message 
+        - If the file at `config_path` already exists, no action is taken, and a message
           is printed to indicate this.
+
     Prints:
-        - A message indicating that the default configuration has been copied, or that 
+        - A message indicating that the default configuration has been copied, or that
           the configuration file already exists.
     """
     if not os.path.exists(config_path):

@@ -3,7 +3,6 @@ import sqlite3
 import pandas as pd
 import helper_functions as h
 
-
 def get_data(obj, ):
     """
     Load and process data from various input sources (SQLite, Excel, or V2G) into the object's attributes.
