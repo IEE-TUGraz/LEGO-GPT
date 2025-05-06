@@ -1,4 +1,4 @@
-Welcome to LEGOGPT's documentation!
+Welcome to LEGO GPT's documentation!
 =============================================
 
 .. toctree::

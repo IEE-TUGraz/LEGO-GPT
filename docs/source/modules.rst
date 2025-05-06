@@ -1,7 +1,7 @@
 LEGO_GPT Package
 ================
 
-.. automodule:: LEGO_GPT
+.. automodule:: LEGO GPT
    :members:
    :undoc-members:
    :show-inheritance:
