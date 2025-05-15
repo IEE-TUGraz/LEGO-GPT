@@ -2,6 +2,8 @@ import os
 import sqlite3
 import pandas as pd
 import helper_functions as h
+from InOutModule import ExcelReader
+from InOutModule.ExcelWriter import ExcelWriter
 
 def get_data(obj, ):
     """
@@ -116,7 +118,12 @@ def get_data(obj, ):
                         self.vLineP.at[row_idx, "line"] = str(int(idx))  # Use row index from enumerate
                         break  # Stop searching once a match is found
 
-        self.coords = h.load_lat_lon(self.input_dir)
+        # self.coords = h.load_lat_lon(self.input_dir)
+        self.coords = ExcelReader.get_dPower_BusInfo(os.path.join(self.input_dir, "Power_BusInfo.xlsx"), True, True)
+        ew = ExcelWriter("InOutModule/ExcelDefinitions.xml")
+        ew.write_dPower_BusInfo(self.coords, self.input_dir)
+        self.coords = self.coords[["lat", "lon"]]
+        self.coords["values"] = self.coords.index.astype(str)
 
         # add tec to self.gi
         tec = []
@@ -139,7 +146,7 @@ def get_data(obj, ):
         # close the connection
         conn.close()
     
-    elif self.input_type == "excel":
+    elif self.input_type == "excel": # these are Roberts excel files
         fast=True
         if not fast:
             for table in self.tables:
