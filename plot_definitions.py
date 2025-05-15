@@ -49,7 +49,9 @@ def generate_plot(self: pd.DataFrame, x_axis: str, y_axis: str, scope: str, node
             x_label = "Line"
             title = "Power Flow Distribution over all Lines" if scope == "Global" else f"Local Power Flow Distribution for {line_idx}"
             fig = px.histogram(y_df, x="values", color="line", title=title, nbins=10,
-                               color_discrete_sequence=color_sequence)          
+                               color_discrete_sequence=color_sequence)   
+        else:
+            fig = None # return None if no valid x_axis and y_axis combination is found       
     return fig
 
 

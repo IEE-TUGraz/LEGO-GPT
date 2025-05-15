@@ -192,7 +192,7 @@ class LEGO_GPT:
         """
 
         self.long_format = True if "rp" not in self.tables or (len(self.rp) == 1 and len(self.k) > 24) else False
-        display_time_range = 'block' if self.long_format else 'none'
+        display_time_range = 'block'  if self.long_format else 'none'
         display_rp = 'none' if self.long_format else 'block'
         if not self.long_format:
             options = [{"label": f"Period: {p}", "value": p} for p in self.rp["values"].values]
@@ -230,7 +230,7 @@ class LEGO_GPT:
                                         1: {'label': 'k0001'},
                                         len(self.k) // 2: {'label': f"k{len(self.k) // 2:04d}"},
                                         len(self.k): {'label': f"k{len(self.k):04d}"},
-                                    } if self.long_format else {k: {'label': str(k)} for k in self.k}
+                                    } # if self.long_format else {k: {'label': str(k)} for k in self.k}
                                 ),
                                 tooltip={"placement": "top", "always_visible": True},
                                 value=1,
