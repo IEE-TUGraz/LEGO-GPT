@@ -123,13 +123,13 @@ class LEGO_GPT:
         """
         get_data(self)
                 # print out the all data attributes of the object
-        print("Data attributes of the object:")
-        for attr in dir(self):
-            if not attr.startswith("__") and not callable(getattr(self, attr)):
-                attr_value = getattr(self, attr)
-                # print the head if it is a dataframe
-                if isinstance(attr_value, (pd.DataFrame, pd.Series)):
-                    print(f"{attr}:\n{attr_value.head()}")
+        # print("Data attributes of the object:")
+        # for attr in dir(self):
+        #     if not attr.startswith("__") and not callable(getattr(self, attr)):
+        #         attr_value = getattr(self, attr)
+        #         # print the head if it is a dataframe
+        #         if isinstance(attr_value, (pd.DataFrame, pd.Series)):
+        #             print(f"{attr}:\n{attr_value.head()}")
 
         # set index of self.i to "values" for simpler indexing
         self.i.set_index("values", inplace=True)

@@ -264,7 +264,20 @@ def extract_excel_to_dataframe(input_dir: str, table: str) -> pd.DataFrame:
 
     elif table == "pDemand":
         pass
+    
+    elif table == "vStIntraRes":
+        filepath = os.path.join(input_dir, "results", "results.xlsx")
+        sheetname = "StIntra"
+                # Read the Excel file with multi-index columns and row index for k
+        df = pd.read_excel(filepath, sheet_name=sheetname, header=[0, 1], index_col=0)
 
+        # Convert to long format
+        df_long = df.stack(level=[0, 1], future_stack=True).reset_index()
+
+        # Rename columns to match desired output
+        df_long.columns = ['k', 'storageUnits', 'rp', 'values']
+        print(df_long.head())
+        return df_long
     else:
         print(f"Table {table} not yet implemented or invalid.")
         df = None

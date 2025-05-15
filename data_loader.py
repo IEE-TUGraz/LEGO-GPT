@@ -54,13 +54,14 @@ def get_data(obj, ):
         # print out all tables in the database
         cursor = conn.cursor()
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
-        # print(cursor.fetchall())
+        print(cursor.fetchall())
 
 
         for table in self.tables:
             # load the data as variable with the table name
             setattr(self, table, h.extract_table_to_dataframe(conn, table))
         
+        # modify if needed
         if "rp" in self.tables:
             # region remove unnecessary index column in sets
             self.rp.drop(columns=["index"], inplace=True)
@@ -91,7 +92,6 @@ def get_data(obj, ):
         if "storageUnits" in self.tables:
             self.storageUnits.drop(columns=["index"], inplace=True)
             self.storageUnits.rename(columns={"0": "g"}, inplace=True)
-
         if "la" in self.tables:
             self.la.drop(columns=["index"], inplace=True)
             self.la.rename(columns={"0": "i"}, inplace=True)
@@ -117,7 +117,8 @@ def get_data(obj, ):
                         # Update the corresponding row in vLineP
                         self.vLineP.at[row_idx, "line"] = str(int(idx))  # Use row index from enumerate
                         break  # Stop searching once a match is found
-
+        if "vStIntraRes" in self.tables:
+            print(self.vStIntraRes.head())            
         # self.coords = h.load_lat_lon(self.input_dir)
         self.coords = ExcelReader.get_dPower_BusInfo(os.path.join(self.input_dir, "Power_BusInfo.xlsx"), True, True)
         ew = ExcelWriter("InOutModule/ExcelDefinitions.xml")
@@ -147,7 +148,7 @@ def get_data(obj, ):
         conn.close()
     
     elif self.input_type == "excel": # these are Roberts excel files
-        fast=True
+        fast=False
         if not fast:
             for table in self.tables:
                 print(f"Loading table {table}...")
