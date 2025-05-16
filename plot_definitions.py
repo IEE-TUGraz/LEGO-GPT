@@ -12,6 +12,8 @@ def generate_plot(self: pd.DataFrame, x_axis: str, y_axis: str, scope: str, node
         y_df = filter_dataframe(self, "vGenP", rp=selected_period, scope=scope, local_node=node_idx, k_range=k_range)
     elif y_axis == "power_flow":
         y_df = filter_dataframe(self, "vLineP", rp=selected_period, scope=scope, local_line=line_idx, k_range=k_range)
+    elif y_axis == "soc":
+        y_df = filter_dataframe(self, "vStIntraRes", rp=selected_period, scope=scope, local_node=node_idx, k_range=k_range)
     else:
         y_df = None    
 
@@ -23,19 +25,16 @@ def generate_plot(self: pd.DataFrame, x_axis: str, y_axis: str, scope: str, node
         if x_axis == "time" and y_axis == "dispatch":
             x_label = "Time"
             title = "Global dispatch over time" if scope == "Global" else f"Local dispatch for {node_idx} over time"
-            fig = px.area(y_df, x="k", y="values", color="g", title=title, labels={"k": x_label, "values": "Dispatch", "g": "Generator"}, color_discrete_sequence=color_sequence,)
-        
+            fig = px.area(y_df, x="k", y="values", color="g", title=title, labels={"k": x_label, "values": "Dispatch", "g": "Generator"}, color_discrete_sequence=color_sequence,)    
         elif x_axis == "time" and y_axis == "demand":
             x_label = "Time"
             title = "Global demand over time" if scope == "Global" else f"Local demand for {node_idx} over time"
-            fig = px.line(y_df, x="k", y="values", title="Demand Over Time", labels={"i": x_label, "values": "Demand"}, color_discrete_sequence=color_sequence,)
-        
+            fig = px.line(y_df, x="k", y="values", title="Demand Over Time", labels={"i": x_label, "values": "Demand"}, color_discrete_sequence=color_sequence,)       
         elif x_axis == "time" and y_axis == "power_flow":
             x_label = "Time"
             title = "Power Flow over time" if scope == "Global" else f"Local Power Flow for {line_idx} over time"
             fig = px.line(y_df, x="k", y="values", color="line", title=title, labels={"k": x_label, "values": "Power Flow", "line": "Line"},
                               hover_data={"values": True, "line": True, "i": True, "j": True}, color_discrete_sequence=color_sequence,)
-
         elif x_axis == "generator" and y_axis == "dispatch":
             x_label = "Generator"
             y_df["k"] = y_df["k"].astype(str).copy()
@@ -44,12 +43,16 @@ def generate_plot(self: pd.DataFrame, x_axis: str, y_axis: str, scope: str, node
             title = "Global dispatch for each generator" if scope == "Global" else f"Local dispatch for {node_idx}"
             fig = px.bar(y_df, x="g", y="values", color="g", title=title, labels={"g": x_label, "values": "Dispatch", "k": "Time"},
                          hover_data={"values": False, "k": False}, color_discrete_sequence=color_sequence)
-
         elif x_axis == "line" and y_axis == "power_flow":
             x_label = "Line"
             title = "Power Flow Distribution over all Lines" if scope == "Global" else f"Local Power Flow Distribution for {line_idx}"
             fig = px.histogram(y_df, x="values", color="line", title=title, nbins=10,
-                               color_discrete_sequence=color_sequence)   
+                               color_discrete_sequence=color_sequence)  
+        elif x_axis == "time" and y_axis == "soc":
+            x_label = "time"
+            title = "vStIntraRes for all Storage Units over time" if scope == "Global" else f"vStIntraRes for storage units of {node_idx} over time"
+            fig = px.line(y_df, x="k", y="values", color="i", title=title, labels={"k": x_label, "values": "State of Charge", "i": "Storage Unit"},
+                              hover_data={"values": True, "i": True}, color_discrete_sequence=color_sequence)
         else:
             fig = None # return None if no valid x_axis and y_axis combination is found       
     return fig
@@ -123,4 +126,14 @@ def filter_dataframe(self, attr_str: str, rp: str, scope: str, local_node: str=N
         if scope == "Local":
             df = df[df["line"] == local_line]
 
+    elif attr_str == "vStIntraRes":
+        df = self.vStIntraRes
+        if df is None:
+            return None
+        if not self.long_format:
+            df = df[df["rp"] == rp]
+        if k_range:
+            df = df[df["k"].isin(k_range)]
+        if scope == "Local":
+            df = df[df["i"] == local_node]
     return df

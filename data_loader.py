@@ -61,7 +61,7 @@ def get_data(obj, ):
             # load the data as variable with the table name
             setattr(self, table, h.extract_table_to_dataframe(conn, table))
         
-        # modify if needed
+        # modify dataframes if needed
         if "rp" in self.tables:
             # region remove unnecessary index column in sets
             self.rp.drop(columns=["index"], inplace=True)
@@ -80,7 +80,7 @@ def get_data(obj, ):
             self.gi.drop(columns=["index"], inplace=True)
             self.gi.rename(columns={"0": "g"}, inplace=True)
             self.gi.rename(columns={"1": "i"}, inplace=True)
-        if "thermalGenerators" in self.tables: # NOTE define those in the config as tec categories?
+        if "thermalGenerators" in self.tables: 
             self.thermalGenerators.drop(columns=["index"], inplace=True)
             self.thermalGenerators.rename(columns={"0": "g"}, inplace=True)
         if "rorGenerators" in self.tables:
@@ -118,7 +118,12 @@ def get_data(obj, ):
                         self.vLineP.at[row_idx, "line"] = str(int(idx))  # Use row index from enumerate
                         break  # Stop searching once a match is found
         if "vStIntraRes" in self.tables:
-            print(self.vStIntraRes.head())            
+            if not hasattr(self, "gi"):
+                raise ValueError("vStIntraRes table requires gi table to be loaded first.")
+            # add information about node attached to the storage unit
+            self.vStIntraRes = self.vStIntraRes.merge(self.gi, left_on='storageUnits', right_on='g', how='inner').drop(columns=['g'])
+            print(self.vStIntraRes.head())
+
         # self.coords = h.load_lat_lon(self.input_dir)
         self.coords = ExcelReader.get_dPower_BusInfo(os.path.join(self.input_dir, "Power_BusInfo.xlsx"), True, True)
         ew = ExcelWriter("InOutModule/ExcelDefinitions.xml")
@@ -147,7 +152,8 @@ def get_data(obj, ):
         # close the connection
         conn.close()
     
-    elif self.input_type == "excel": # these are Roberts excel files
+    ### These are Roberts excels and will in the future be replaced by the sqlite database as above ###
+    elif self.input_type == "excel": 
         fast=False
         if not fast:
             for table in self.tables:
@@ -171,6 +177,11 @@ def get_data(obj, ):
             self.vLineP = self.vLineP[self.vLineP["duplicate"] == False].copy()
             # drop duplicate column
             self.vLineP.drop(columns=["duplicate"], inplace=True)
+
+            if not hasattr(self, "gi"):
+                raise ValueError("vStIntraRes table requires gi table to be loaded first.")
+            # add information about node attached to the storage unit
+            self.vStIntraRes = self.vStIntraRes.merge(self.gi, left_on='storageUnits', right_on='g', how='inner').drop(columns=['g'])
 
             # save all the modified tables to a sqlite database
             # create a new database
