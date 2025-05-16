@@ -7,6 +7,7 @@ Welcome to LEGO GPT's documentation!
 
    introduction
    data_description
+   adding_data
    modules
 
 Indices and tables
