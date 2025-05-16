@@ -122,7 +122,6 @@ def get_data(obj, ):
                 raise ValueError("vStIntraRes table requires gi table to be loaded first.")
             # add information about node attached to the storage unit
             self.vStIntraRes = self.vStIntraRes.merge(self.gi, left_on='storageUnits', right_on='g', how='inner').drop(columns=['g'])
-            print(self.vStIntraRes.head())
 
         # self.coords = h.load_lat_lon(self.input_dir)
         self.coords = ExcelReader.get_dPower_BusInfo(os.path.join(self.input_dir, "Power_BusInfo.xlsx"), True, True)
@@ -472,7 +471,6 @@ def get_data(obj, ):
     else:
         raise ValueError("Invalid input type. Please choose either 'excel', 'sqlite' or V2G.")
     
-
     # add the coordinates in coords to the i dataframe
     self.i = pd.merge(self.i, self.coords, left_on="values", right_on="values", how="left")
 
