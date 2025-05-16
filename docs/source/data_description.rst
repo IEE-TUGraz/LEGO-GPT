@@ -102,3 +102,18 @@ This is done to simplify indexing, but it requires the 'values' column to be uni
    "rp01", "k0001", "AT00", "DE00", 5772.293185, 2, 0.769639, 7500
    "rp01", "k0001", "AT00", "HU00", -800.0, 3, 1.0, 800
    "rp01", "k0001", "AT00", "ITN1", -875.0, 4, 1.0, 875
+
+---
+
+**8. vStIntraRes – Storage SOC Values**
+
+.. csv-table::
+   :header: "rp", "k", "i", "storageUnits", "values", "tec"
+   :widths: 10, 10, 10, 20, 10, 10
+
+   "rp01", "k0001", "AL00", "AL00HS", 0.500000, "HS"
+   "rp01", "k0001", "AT00", "AT00HS", 0.500113, "HS"
+   "rp01", "k0001", "AT00", "AT00HPS", 0.496457, "HPS"
+   "rp01", "k0001", "AT00", "AT00HPSCL", 0.500000, "HPS"
+   "rp01", "k0001", "AT00", "AT00BESS", 0.545226, "BESS"
+
