@@ -24,7 +24,7 @@ def get_data(obj, ):
         - For V2G input, the function processes data specific to the V2G format, including handling duplicate lines and calculating relative values.
 
     Attributes Set on `obj`:
-        - Various attributes corresponding to the loaded tables (e.g., `vLineP`, `pPmax`, `coords`, etc.).
+        - Various attributes corresponding to the loaded tables (e.g., `vLineP`, `pSmax_line`, `coords`, etc.).
         - `coords`: A DataFrame containing latitude and longitude information.
         - `bounds`: A list of coordinate bounds for map display.
         - `vLineP_max`: The maximum value in the `vLineP` DataFrame.
@@ -33,7 +33,7 @@ def get_data(obj, ):
     Processing Details:
         - Renames columns and drops unnecessary ones for consistency.
         - Handles duplicate entries in `vLineP` and adjusts flow values accordingly.
-        - Computes relative values (`rel_values`) for `vLineP` based on `pPmax`.
+        - Computes relative values (`rel_values`) for `vLineP` based on `pSmax_line`.
         - Merges coordinate data into the `i` DataFrame.
         - Computes bounds for map display based on latitude and longitude.
 
@@ -42,7 +42,7 @@ def get_data(obj, ):
         obj = SomeClass()
         obj.input_type = "sqlite"
         obj.input_dir = "/path/to/data"
-        obj.tables = ["vLineP", "pPmax", "coords"]
+        obj.tables = ["vLineP", "pSmax_line", "coords"]
         get_data(obj)
     """
 
@@ -97,10 +97,10 @@ def get_data(obj, ):
             self.la.rename(columns={"0": "i"}, inplace=True)
             self.la.rename(columns={"1": "j"}, inplace=True)
             self.la.rename(columns={"2": "c"}, inplace=True)
-        if "pPmax" in self.tables:
-            self.pPmax.rename(columns={"level_0": "i"}, inplace=True)
-            self.pPmax.rename(columns={"level_1": "j"}, inplace=True)
-            self.pPmax.rename(columns={"level_2": "c"}, inplace=True)
+        if "pSmax_line" in self.tables:
+            self.pSmax_line.rename(columns={"level_0": "i"}, inplace=True)
+            self.pSmax_line.rename(columns={"level_1": "j"}, inplace=True)
+            self.pSmax_line.rename(columns={"level_2": "c"}, inplace=True)
         if "vLineP" in self.tables:
             self.vLineP.rename(columns={"level_0": "rp"}, inplace=True)
             self.vLineP.rename(columns={"level_1": "k"}, inplace=True)
@@ -193,7 +193,7 @@ def get_data(obj, ):
                     self.la.to_sql(table, conn, if_exists="replace", index=False)
                 elif table == "i":
                     self.i.to_sql(table, conn, if_exists="replace", index=False)
-                elif table == "pPmax":
+                elif table == "pSmax_line":
                     pass
                 elif table == "k":
                     self.k.to_sql(table, conn, if_exists="replace", index=False) 
@@ -248,19 +248,20 @@ def get_data(obj, ):
             print(f"Loading table {table}...")
 
             if table == "vLineP":
-                table_name = "vP"
+                table_name = "vLineP"
             elif table == "la":
                 table_name = "Branches"
             elif table == "i":
                 table_name = "Buses"
-            elif table == "pPmax":
-                table_name = "thermal_lim"
+            elif table == "pSmax_line":
+                table_name = "pSmax_line"
             elif table == "k":
                 table_name = "Time"
             else:
                 table_name = table
             # load the data as variable with the table name
-            setattr(self, table, h.extract_table_to_dataframe(conn, table_name))   
+
+            setattr(self, table, h.extract_table_to_dataframe(conn, table_name))
 
         # merge self.lat and self.lon
         buses = self.lat["Buses"].values.astype(str)
@@ -277,17 +278,17 @@ def get_data(obj, ):
         # make sure the values are strings
         self.i["values"] = self.i["values"].astype(str)
 
-        # rename pPmax columns
-        self.pPmax.rename(columns={"level_0": "i"}, inplace=True)
-        self.pPmax.rename(columns={"level_1": "j"}, inplace=True)
+        # rename pSmax_line columns
+        self.pSmax_line.rename(columns={"level_0": "i"}, inplace=True)
+        self.pSmax_line.rename(columns={"level_1": "j"}, inplace=True)
         # transform i and j to type str
-        self.pPmax["i"] = self.pPmax["i"].astype(str)
-        self.pPmax["j"] = self.pPmax["j"].astype(str)
+        self.pSmax_line["i"] = self.pSmax_line["i"].astype(str)
+        self.pSmax_line["j"] = self.pSmax_line["j"].astype(str)
 
         # rename la columns
         self.la.drop(columns=["index"], inplace=True)
         self.la.rename(columns={"0": "i"}, inplace=True)
-        self.la.rename(columns={"1": "j"}, inplace=True) 
+        self.la.rename(columns={"1": "j"}, inplace=True)
         # transform i and j to type str
         self.la["i"] = self.la["i"].astype(str)
         self.la["j"] = self.la["j"].astype(str)
@@ -319,8 +320,11 @@ def get_data(obj, ):
         self.vLineP["duplicate"] = False
     
         # iterate over vLineP and find lines based on set(i, j)
-        for row_idx, row in enumerate(self.vLineP.itertuples(index=True)):  # Keep index for modification
+        for row_idx, row in enumerate(self.vLineP.itertuples(index=True)):
             ij_key = frozenset([row.i, row.j])
+            if ij_key not in line_index_dict:
+                print(f"⚠️  Missing line for nodes: {row.i}, {row.j} — not in `la`")
+                continue  # or raise an error, or skip the row safely
             line = line_index_dict[ij_key]
             is_duplicate = [row.i, row.j] != line_list[line]
             # Update the corresponding row in vLineP
@@ -339,15 +343,15 @@ def get_data(obj, ):
         self.vLineP.reset_index(drop=True, inplace=True)    
 
 
-        # iterate over pPmax and add drop duplicate lines
-        for row_idx, row in enumerate(self.pPmax.itertuples(index=True)):  # Keep index for modification
+        # iterate over pSmax_line and add drop duplicate lines
+        for row_idx, row in enumerate(self.pSmax_line.itertuples(index=True)):  # Keep index for modification
             node_list = [row.i, row.j]
             # check if the line is in the line_list
             if node_list not in line_list:
-                # drop the line from pPmax
-                self.pPmax.drop(row_idx, inplace=True)
+                # drop the line from pSmax_line
+                self.pSmax_line.drop(row_idx, inplace=True)
         # reset index
-        self.pPmax.reset_index(drop=True, inplace=True)
+        self.pSmax_line.reset_index(drop=True, inplace=True)
 
 
         # create gi dataframe
@@ -386,6 +390,25 @@ def get_data(obj, ):
                 tec = "Wind"
                 # add to the list
                 wind_generators.append([g, i, tec])
+
+        # add hydro generators
+        hydro_generators = []
+
+        if hasattr(self, "Hydro_Buses"):
+            # rename the columns
+            self.Hydro_Buses.rename(columns={"0": "i"}, inplace=True)
+            # drop the index column
+            self.Hydro_Buses.drop(columns=["index"], inplace=True)
+            for row_idx, row in enumerate(self.Hydro_Buses.itertuples(index=True)):
+                # get the generator name
+                g = row.i + "_Hydro"
+                # get the bus name
+                i = row.i
+                # get tec
+                tec = "Hydro"
+                # add to the list
+                hydro_generators.append([g, i, tec])
+
         # add charging buses
         charging_buses = []
         if hasattr(self, "Charging_Buses"):
@@ -409,6 +432,8 @@ def get_data(obj, ):
             self.gi = pd.concat([self.gi, pd.DataFrame(pv_generators, columns=["g", "i", "tec"])], ignore_index=True)
         if hasattr(self, "Wind_Buses"):
             self.gi = pd.concat([self.gi, pd.DataFrame(wind_generators, columns=["g", "i", "tec"])], ignore_index=True)
+        if hasattr(self, "Hydro_Buses"):
+            self.gi = pd.concat([self.gi, pd.DataFrame(hydro_generators, columns=["g", "i", "tec"])], ignore_index=True)
         if hasattr(self, "Charging_Buses"):
             self.gi = pd.concat([self.gi, pd.DataFrame(charging_buses, columns=["g", "i", "tec"])], ignore_index=True)
         
@@ -418,8 +443,8 @@ def get_data(obj, ):
                                                                 "g": "str",
                                                                 "values": "float"})
         pv_production = []
-        if hasattr(self, "vPV_production") and not self.vPV_production.empty:
-            for row_idx, row in enumerate(self.vPV_production.itertuples(index=True)):
+        if hasattr(self, "vProduction_PV") and not self.vProduction_PV.empty:
+            for row_idx, row in enumerate(self.vProduction_PV.itertuples(index=True)):
                 # get the generator name
                 g = row.PV_Buses + "_PV"
                 # get the time
@@ -431,8 +456,8 @@ def get_data(obj, ):
                 pv_production.append([k, g, value])
 
         wind_production = []
-        if hasattr(self, "vWind_production") and not self.vWind_production.empty:
-            for row_idx, row in enumerate(self.vWind_production.itertuples(index=True)):
+        if hasattr(self, "vProduction_Wind") and not self.vProduction_Wind.empty:
+            for row_idx, row in enumerate(self.vProduction_Wind.itertuples(index=True)):
                 # get the generator name
                 g = row.Wind_Buses + "_Wind"
                 # get the time
@@ -442,26 +467,45 @@ def get_data(obj, ):
 
                 # add to the list
                 wind_production.append([k, g, value])
-        charging_production = []
-        if hasattr(self, "vCharging_production") and not self.vCharging_production.empty:
-            for row_idx, row in enumerate(self.vCharging_production.itertuples(index=True)):
+
+        hydro_production = []
+
+        if hasattr(self, "vProduction_Hydro") and not self.vProduction_Hydro.empty:
+            for row_idx, row in enumerate(self.vProduction_Hydro.itertuples(index=True)):
                 # get the generator name
-                g = row.Charging_Buses + "_Discharging"
+                g = row.Hydro_Buses + "_Hydro"
+
                 # get the time
                 k = row.Time
                 # get the value
                 value = row.values
 
                 # add to the list
-                charging_production.append([k, g, value])
+                hydro_production.append([k, g, value])
+
+        charging_production = []
+        if hasattr(self, "vProduction_EV") and not self.vProduction_EV.empty:
+
+            # Extract the actual bus names from the Charging_Buses DataFrame
+            charging_bus_names = set(self.Charging_Buses["i"]) if hasattr(self, "Charging_Buses") else set()
+
+            for row in self.vProduction_EV.itertuples(index=False):
+                bus = row.Buses
+                if bus in charging_bus_names:
+                    g = bus + "_Discharging"
+                    k = row.Time
+                    value = row.values
+                    # add to the list
+                    charging_production.append([k, g, value])
         # put all the generators in one dataframe
-        if hasattr(self, "vPV_production") and not self.vPV_production.empty:
+        if hasattr(self, "vProduction_PV") and not self.vProduction_PV.empty:
             self.vGenP = pd.concat([self.vGenP, pd.DataFrame(pv_production, columns=["k", "g", "values"])], ignore_index=True)
-        if hasattr(self, "vWind_production") and not self.vWind_production.empty:
+        if hasattr(self, "vProduction_Wind") and not self.vProduction_Wind .empty:
             self.vGenP = pd.concat([self.vGenP, pd.DataFrame(wind_production, columns=["k", "g", "values"])], ignore_index=True)
-        if hasattr(self, "vCharging_production") and not self.vCharging_production.empty:
+        if hasattr(self, "vProduction_Hydro") and not self.vProduction_Hydro.empty:
+            self.vGenP = pd.concat([self.vGenP, pd.DataFrame(hydro_production, columns=["k", "g", "values"])], ignore_index=True)
+        if hasattr(self, "vProduction_EV") and not self.vProduction_EV.empty:
             self.vGenP = pd.concat([self.vGenP, pd.DataFrame(charging_production, columns=["k", "g", "values"])], ignore_index=True)
-        print(self.vWind_production)
 
         self.vGenP["k"] = self.vGenP["k"].apply(lambda x: f"k{int(x+1):04d}")
 
@@ -474,24 +518,24 @@ def get_data(obj, ):
     # add the coordinates in coords to the i dataframe
     self.i = pd.merge(self.i, self.coords, left_on="values", right_on="values", how="left")
 
-    # iterate over pPmax and add the line number to the dataframe
-    for row_idx, row in enumerate(self.pPmax.itertuples(index=True)):  # Keep index for modification
+    # iterate over pSmax_line and add the line number to the dataframe
+    for row_idx, row in enumerate(self.pSmax_line.itertuples(index=True)):  # Keep index for modification
         node_set = {row.i, row.j}  # Use set for order-independent comparison
 
         # Iterate over self.la DataFrame to find the matching line
         for idx, line in enumerate(self.la.itertuples(index=False)):
             if {line.i, line.j} == node_set:
                 # Update the corresponding row in vLineP
-                self.pPmax.at[row_idx, "line"] = str(int(idx))
+                self.pSmax_line.at[row_idx, "line"] = str(int(idx))
                 break  # Stop searching once a match is found
 
 
-    # add to every line in vLineP the value divided by pPmax
+    # add to every line in vLineP the value divided by pSmax_line in MVA
     self.vLineP["rel_values"] = abs(self.vLineP["values"]) / self.vLineP["line"].map(
-        self.pPmax.set_index("line")["values"]
+        self.pSmax_line.set_index("line")["values"]/ 1000
     )
-    self.vLineP["pPmax"] = self.vLineP["line"].map(
-        self.pPmax.set_index("line")["values"]
+    self.vLineP["pSmax_line"] = self.vLineP["line"].map(
+        self.pSmax_line.set_index("line")["values"]/ 1000
     )
  
     # Compute bounds for map display

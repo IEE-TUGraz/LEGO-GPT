@@ -89,7 +89,6 @@ def filter_dataframe(self, attr_str: str, rp: str, scope: str, local_node: str=N
     """
    
     df = None
-
     if attr_str == "vGenP":
         df = self.vGenP
         if df is None:
@@ -101,6 +100,8 @@ def filter_dataframe(self, attr_str: str, rp: str, scope: str, local_node: str=N
         if scope == "Local":
             g_local = self.gi[self.gi["i"] == local_node]
             df = df[df["g"].isin(g_local["g"])]
+
+
 
     elif attr_str == "pDemandP":
         df = self.pDemandP

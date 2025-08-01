@@ -9,7 +9,7 @@ from ui_handler import generate_network_map, generate_dynamic_plot
 import sys
 from MarkerJS import MarkerJS
 import pandas as pd
-
+import sqlite3
 
 
 class LEGO_GPT:
@@ -89,6 +89,7 @@ class LEGO_GPT:
 
         # Load configuration from this directory or from the provided path
         config = h.load_config("config.yml") if config_path is None else h.load_config(config_path)
+
         self.input_dir = config["input_dir"]
         self.input_type = config["input_type"]
         self.tables = config["tables"]
@@ -97,14 +98,18 @@ class LEGO_GPT:
         self.map_options = config["map_options"]
         self.graph_options = config["graph_options"]
 
+        db_path = os.path.join(self.input_dir, "result.sqlite")
+        print("🔍 Attempting to open:", db_path)
+
         if self.input_type not in ["excel", "sqlite", "V2G"]:
             raise ValueError("Invalid input type. Please choose either 'excel', 'sqlite' or V2G.")
 
-        required_tables = ["i", "la", "vLineP", "pPmax", "k", "vGenP"]
+        required_tables = ["i", "la", "vLineP", "pSmax_line", "k", "vGenP"]
+
         missing = [t for t in required_tables if t not in self.tables]
+
         if missing:
             raise ValueError(f"Missing required table(s): {', '.join(missing)}")
-
 
         self.load_data()  # Load data on initialization
         self.js_generator = MarkerJS(self.map_options, self.vGenP)  # Create instance of MarkerJS with vGenP data for pie chart sizing
@@ -134,8 +139,6 @@ class LEGO_GPT:
         # set index of self.i to "values" for simpler indexing
         self.i.set_index("values", inplace=True)
 
-
-      
         
     def create_app(self):
         """

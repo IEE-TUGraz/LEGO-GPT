@@ -94,7 +94,7 @@ def generate_network_map(self, selected_period: str, selected_time: int, zoom_le
             weight=line_weight,
             id=f"{line_id}",  
             children=[
-            dl.Popup(f"Power Flow: {abs(flow_val):.1f} MW, Line rating: {vLineP_filtered.iloc[idx]['pPmax']:.1f} MW")
+            dl.Popup(f"Power Flow: {abs(flow_val):.1f} MW, Line rating: {vLineP_filtered.iloc[idx]['pSmax_line']:.1f} MW")
             ],       
             n_clicks=0
         )
