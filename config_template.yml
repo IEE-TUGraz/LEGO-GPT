@@ -11,6 +11,7 @@ tables:
   - vLineP
   - vGenP
   - pPmax
+  - vStIntraRes
   - thermalGenerators # only for LEGO pyomo needed
   - rorGenerators # only for LEGO pyomo needed
   - vresGenerators # only for LEGO pyomo needed
