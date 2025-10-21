@@ -1,11 +1,12 @@
-import pandas as pd
 import os
-import yaml
-import time
 import sqlite3
+from typing import Optional
+
+import pandas as pd
+import yaml
+
 
 def extract_table_to_dataframe(con: sqlite3.Connection, table_name: str) -> Optional[pd.DataFrame]:
-def extract_table_to_dataframe(con: sqlite3.Connection, table_name: str) -> pd.DataFrame:
     """
     Extracts the contents of a database table into a pandas DataFrame.
     Args:
@@ -26,14 +27,14 @@ def extract_table_to_dataframe(con: sqlite3.Connection, table_name: str) -> pd.D
         # Query the table
         query = f"SELECT * FROM {table_name};"
         df = pd.read_sql(query, con)
-        
+
         return df
-    
+
     except Exception as e:
         print(f"Error extracting table {table_name}: {e}")
         return None
 
-def extract_excel_to_dataframe(input_dir: str, table: str) -> pd.DataFrame:
+
     """
     Extract data from Excel files into a pandas DataFrame based on the specified table type.
     This function processes various Excel files and sheets, extracting and transforming data 
@@ -266,7 +267,8 @@ def extract_excel_to_dataframe(input_dir: str, table: str) -> pd.DataFrame:
     else:
         return df 
 
-def copy_default_config(config_path: str="config.yml", default_config_path: str="config_template.yml") -> None:
+
+def copy_default_config(config_path: str = "config.yml", default_config_path: str = "config_template.yml") -> None:
     """
     Copies a default configuration file to a specified path if it does not already exist.
 
@@ -292,11 +294,12 @@ def copy_default_config(config_path: str="config.yml", default_config_path: str=
         with open(config_path, 'w') as f:
             f.write(config)
         print(f"Copied default configuration to {config_path}. Enter path settings in the file, then rerun.")
-        
+
     else:
         print(f"Configuration file already exists at {config_path}.")
 
-def load_config(config_path: str="config.yml") -> dict:
+
+def load_config(config_path: str = "config.yml") -> dict:
     """
     Loads a YAML configuration file and returns its contents as a dictionary.
 
@@ -314,4 +317,3 @@ def load_config(config_path: str="config.yml") -> dict:
     with open(config_path, 'r') as f:
         config = yaml.safe_load(f)
     return config
-
