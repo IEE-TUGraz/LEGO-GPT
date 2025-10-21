@@ -1,11 +1,14 @@
 import os
 import sqlite3
+
 import pandas as pd
+
 import helper_functions as h
 from InOutModule import ExcelReader
 from InOutModule.ExcelWriter import ExcelWriter
 
-def get_data(obj, ):
+
+def get_data(obj):
     """
     Load and process data from various input sources (SQLite, Excel, or V2G) into the object's attributes.
     This function handles data extraction, transformation, and loading based on the specified input type.
@@ -56,11 +59,10 @@ def get_data(obj, ):
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
         print(cursor.fetchall())
 
-
         for table in self.tables:
             # load the data as variable with the table name
             setattr(self, table, h.extract_table_to_dataframe(conn, table))
-        
+
         # modify dataframes if needed
         if "rp" in self.tables:
             # region remove unnecessary index column in sets
@@ -70,17 +72,16 @@ def get_data(obj, ):
             self.k.drop(columns=["index"], inplace=True)
             self.k.rename(columns={"0": "values"}, inplace=True)
         if "i" in self.tables:
-            self.i.drop(columns=["index"], inplace=True)    
+            self.i.drop(columns=["index"], inplace=True)
             self.i.rename(columns={"0": "values"}, inplace=True)
         if "g" in self.tables:
             self.g.drop(columns=["index"], inplace=True)
             self.g.rename(columns={"0": "values"}, inplace=True)
         if "gi" in self.tables:
-
             self.gi.drop(columns=["index"], inplace=True)
             self.gi.rename(columns={"0": "g"}, inplace=True)
             self.gi.rename(columns={"1": "i"}, inplace=True)
-        if "thermalGenerators" in self.tables: 
+        if "thermalGenerators" in self.tables:
             self.thermalGenerators.drop(columns=["index"], inplace=True)
             self.thermalGenerators.rename(columns={"0": "g"}, inplace=True)
         if "rorGenerators" in self.tables:
@@ -121,7 +122,8 @@ def get_data(obj, ):
             if not hasattr(self, "gi"):
                 raise ValueError("vStIntraRes table requires gi table to be loaded first.")
             # add information about node attached to the storage unit
-            self.vStIntraRes = self.vStIntraRes.merge(self.gi, left_on='storageUnits', right_on='g', how='inner').drop(columns=['g'])
+            self.vStIntraRes = self.vStIntraRes.merge(self.gi, left_on='storageUnits', right_on='g', how='inner').drop(
+                columns=['g'])
 
         # self.coords = h.load_lat_lon(self.input_dir)
         self.coords = ExcelReader.get_dPower_BusInfo(os.path.join(self.input_dir, "Power_BusInfo.xlsx"), True, True)
@@ -147,13 +149,13 @@ def get_data(obj, ):
             else:
                 tec.append("unknown")
         self.gi["tec"] = tec
-    
+
         # close the connection
         conn.close()
-    
-    ### These are Roberts excels and will in the future be replaced by the sqlite database as above ###
-    elif self.input_type == "excel": 
-        fast=False
+
+    # Load LEGO data from Excel files
+    elif self.input_type == "excel":
+        fast = False  # TODO: are we going to use the database?
         if not fast:
             for table in self.tables:
                 print(f"Loading table {table}...")
@@ -165,27 +167,28 @@ def get_data(obj, ):
                     df, df_g = h.extract_excel_to_dataframe(self.input_dir, table)
                     self.gi = df
                     self.g = df_g
-                elif table == "la" or table == "g": # get from other dataframe
+                elif table == "la" or table == "g":  # get from other dataframe
                     continue
                 else:
-                    # load the data as variable with the table name
+                    # Load the data as variable with the table name
                     setattr(self, table, h.extract_excel_to_dataframe(self.input_dir, table))
             self.coords = h.extract_excel_to_dataframe(self.input_dir, "coords")
 
-            # only take values where duplicate is False
+            # Only take values where duplicate is False
             self.vLineP = self.vLineP[self.vLineP["duplicate"] == False].copy()
-            # drop duplicate column
             self.vLineP.drop(columns=["duplicate"], inplace=True)
 
             if not hasattr(self, "gi"):
                 raise ValueError("vStIntraRes table requires gi table to be loaded first.")
-            # add information about node attached to the storage unit
-            self.vStIntraRes = self.vStIntraRes.merge(self.gi, left_on='storageUnits', right_on='g', how='inner').drop(columns=['g'])
 
-            # save all the modified tables to a sqlite database
-            # create a new database
+            # Add information about node attached to the storage unit
+            self.vStIntraRes = self.vStIntraRes.merge(self.gi, left_on='storageUnits', right_on='g', how='inner').drop(
+                columns=['g'])
+
+            # Save all the modified tables to a sqlite database
             conn = sqlite3.connect(os.path.join(self.input_dir, "test_data.sqlite"))
-            # save all the tables to the database
+
+            # Save all the tables to the database
             for table in self.tables:
                 if table == "vLineP":
                     self.vLineP.to_sql(table, conn, if_exists="replace", index=False)
@@ -196,7 +199,7 @@ def get_data(obj, ):
                 elif table == "pPmax":
                     pass
                 elif table == "k":
-                    self.k.to_sql(table, conn, if_exists="replace", index=False) 
+                    self.k.to_sql(table, conn, if_exists="replace", index=False)
                 elif table == "g":
                     self.g.to_sql(table, conn, if_exists="replace", index=False)
                 elif table == "gi":
@@ -204,35 +207,29 @@ def get_data(obj, ):
                 elif table == "rp":
                     self.rp.to_sql(table, conn, if_exists="replace", index=False)
                 elif table == "coords":
-                    # save the coords dataframe to the database
                     self.coords.to_sql(table, conn, if_exists="replace", index=False)
                 elif table == "vGenP":
-                    # save the vGenP dataframe to the database
                     self.vGenP.to_sql(table, conn, if_exists="replace", index=False)
                     self.vGenP["values"] = self.vGenP["values"].astype(float)
 
                 elif table == "pDemandP":
-                    # save the pDemandP dataframe to the database
                     self.pDemandP.to_sql(table, conn, if_exists="replace", index=False)
                 # elif table == "vStIntraRes":
-                #     # save the vStIntraRes dataframe to the database
                 #     self.vStIntraRes.to_sql(table, conn, if_exists="replace", index=False)
                 # elif table == "vStInterRes":
-                #     # save the vStInterRes dataframe to the database
                 #     self.vStInterRes.to_sql(table, conn, if_exists="replace", index=False)
 
-            self.coords.to_sql("coords", conn, if_exists="replace", index=False)    
+            self.coords.to_sql("coords", conn, if_exists="replace", index=False)
 
         else:
-            # load from the database
-            # connect to the database
+            # Load from the database
             conn = sqlite3.connect(os.path.join(self.input_dir, "test_data.sqlite"))
             for table in self.tables:
-                # load the data as variable with the table name
-                setattr(self, table, h.extract_table_to_dataframe(conn, table)) 
+                # Load the data as variable with the table name
+                setattr(self, table, h.extract_table_to_dataframe(conn, table))
             self.coords = h.extract_excel_to_dataframe(self.input_dir, "coords")
 
-            # set value column of vGenP to float type
+            # Set value column of vGenP to float type
             self.vGenP["values"] = self.vGenP["values"].astype(float)
 
     elif self.input_type == "V2G":
@@ -260,9 +257,9 @@ def get_data(obj, ):
             else:
                 table_name = table
             # load the data as variable with the table name
-            setattr(self, table, h.extract_table_to_dataframe(conn, table_name))   
+            setattr(self, table, h.extract_table_to_dataframe(conn, table_name))
 
-        # merge self.lat and self.lon
+            # merge self.lat and self.lon
         buses = self.lat["Buses"].values.astype(str)
         lat = self.lat["values"].values
         lon = self.lon["values"].values
@@ -272,7 +269,7 @@ def get_data(obj, ):
         del self.lon
 
         # rename i columns
-        self.i.drop(columns=["index"], inplace=True)    
+        self.i.drop(columns=["index"], inplace=True)
         self.i.rename(columns={"0": "values"}, inplace=True)
         # make sure the values are strings
         self.i["values"] = self.i["values"].astype(str)
@@ -287,15 +284,14 @@ def get_data(obj, ):
         # rename la columns
         self.la.drop(columns=["index"], inplace=True)
         self.la.rename(columns={"0": "i"}, inplace=True)
-        self.la.rename(columns={"1": "j"}, inplace=True) 
+        self.la.rename(columns={"1": "j"}, inplace=True)
         # transform i and j to type str
         self.la["i"] = self.la["i"].astype(str)
         self.la["j"] = self.la["j"].astype(str)
 
-
         # iterate over la and find lines based on set(i, j)
         line_index_dict = {}  # frozenset(i,j) -> line index
-        line_list = []        # list of [i, j] in order
+        line_list = []  # list of [i, j] in order
         for row_idx, row in enumerate(self.la.itertuples(index=True)):  # Keep index for modification
             ij_key = frozenset([row.i, row.j])
 
@@ -308,16 +304,16 @@ def get_data(obj, ):
         # rename vLineP columns
         self.vLineP.rename(columns={"level_0": "i"}, inplace=True)
         self.vLineP.rename(columns={"level_1": "j"}, inplace=True)
-        self.vLineP.rename(columns={"level_2": "k"}, inplace=True) 
+        self.vLineP.rename(columns={"level_2": "k"}, inplace=True)
         # change the k column to k0001, k0002, ...
-        self.vLineP["k"] = self.vLineP["k"].apply(lambda x: f"k{int(x+1):04d}") 
+        self.vLineP["k"] = self.vLineP["k"].apply(lambda x: f"k{int(x + 1):04d}")
         # transform i and j to type str
         self.vLineP["i"] = self.vLineP["i"].astype(str)
         self.vLineP["j"] = self.vLineP["j"].astype(str)
 
         # initialize "is_duplicate" column to vLineP
         self.vLineP["duplicate"] = False
-    
+
         # iterate over vLineP and find lines based on set(i, j)
         for row_idx, row in enumerate(self.vLineP.itertuples(index=True)):  # Keep index for modification
             ij_key = frozenset([row.i, row.j])
@@ -326,18 +322,19 @@ def get_data(obj, ):
             # Update the corresponding row in vLineP
             self.vLineP.at[row_idx, "line"] = str(int(line))
             self.vLineP.at[row_idx, "duplicate"] = is_duplicate
-        
-        # reverse  the value of the flow if the line is duplicate
-        self.vLineP.loc[self.vLineP["duplicate"] == True, "values"] = -self.vLineP.loc[self.vLineP["duplicate"] == True, "values"]
-        # always find the two rows with the same "line" and "k" and set their "values" to the mean of the two values
-        self.vLineP["values"] = self.vLineP.groupby(["line", "k"])["values"].transform(lambda x: x.mean() if len(x) > 1 else x)       
-        # drop all entries where the "duplicate" is True
-        self.vLineP = self.vLineP[self.vLineP["duplicate"] == False].copy() 
-        # drop duplicate column
-        self.vLineP.drop(columns=["duplicate"], inplace=True) 
-        # reset index
-        self.vLineP.reset_index(drop=True, inplace=True)    
 
+        # reverse  the value of the flow if the line is duplicate
+        self.vLineP.loc[self.vLineP["duplicate"] == True, "values"] = -self.vLineP.loc[
+            self.vLineP["duplicate"] == True, "values"]
+        # always find the two rows with the same "line" and "k" and set their "values" to the mean of the two values
+        self.vLineP["values"] = self.vLineP.groupby(["line", "k"])["values"].transform(
+            lambda x: x.mean() if len(x) > 1 else x)
+        # drop all entries where the "duplicate" is True
+        self.vLineP = self.vLineP[self.vLineP["duplicate"] == False].copy()
+        # drop duplicate column
+        self.vLineP.drop(columns=["duplicate"], inplace=True)
+        # reset index
+        self.vLineP.reset_index(drop=True, inplace=True)
 
         # iterate over pPmax and add drop duplicate lines
         for row_idx, row in enumerate(self.pPmax.itertuples(index=True)):  # Keep index for modification
@@ -348,7 +345,6 @@ def get_data(obj, ):
                 self.pPmax.drop(row_idx, inplace=True)
         # reset index
         self.pPmax.reset_index(drop=True, inplace=True)
-
 
         # create gi dataframe
         self.gi = pd.DataFrame(columns=["g", "i", "tec"])
@@ -402,8 +398,7 @@ def get_data(obj, ):
                 tec = "V2G_discharging"
                 # add to the list
                 charging_buses.append([g, i, tec])
-        
-        
+
         # put all the generators in one dataframe
         if hasattr(self, "PV_Buses"):
             self.gi = pd.concat([self.gi, pd.DataFrame(pv_generators, columns=["g", "i", "tec"])], ignore_index=True)
@@ -411,12 +406,12 @@ def get_data(obj, ):
             self.gi = pd.concat([self.gi, pd.DataFrame(wind_generators, columns=["g", "i", "tec"])], ignore_index=True)
         if hasattr(self, "Charging_Buses"):
             self.gi = pd.concat([self.gi, pd.DataFrame(charging_buses, columns=["g", "i", "tec"])], ignore_index=True)
-        
+
         # add all the generation to the vGenP dataframe
         self.vGenP = pd.DataFrame(columns=["k", "g", "values"]).astype({
-                                                                "k": "str",  # or int, str, etc. — whatever matches your data
-                                                                "g": "str",
-                                                                "values": "float"})
+            "k": "str",  # or int, str, etc. — whatever matches your data
+            "g": "str",
+            "values": "float"})
         pv_production = []
         if hasattr(self, "vPV_production") and not self.vPV_production.empty:
             for row_idx, row in enumerate(self.vPV_production.itertuples(index=True)):
@@ -456,44 +451,35 @@ def get_data(obj, ):
                 charging_production.append([k, g, value])
         # put all the generators in one dataframe
         if hasattr(self, "vPV_production") and not self.vPV_production.empty:
-            self.vGenP = pd.concat([self.vGenP, pd.DataFrame(pv_production, columns=["k", "g", "values"])], ignore_index=True)
+            self.vGenP = pd.concat([self.vGenP, pd.DataFrame(pv_production, columns=["k", "g", "values"])],
+                                   ignore_index=True)
         if hasattr(self, "vWind_production") and not self.vWind_production.empty:
-            self.vGenP = pd.concat([self.vGenP, pd.DataFrame(wind_production, columns=["k", "g", "values"])], ignore_index=True)
+            self.vGenP = pd.concat([self.vGenP, pd.DataFrame(wind_production, columns=["k", "g", "values"])],
+                                   ignore_index=True)
         if hasattr(self, "vCharging_production") and not self.vCharging_production.empty:
-            self.vGenP = pd.concat([self.vGenP, pd.DataFrame(charging_production, columns=["k", "g", "values"])], ignore_index=True)
+            self.vGenP = pd.concat([self.vGenP, pd.DataFrame(charging_production, columns=["k", "g", "values"])],
+                                   ignore_index=True)
         print(self.vWind_production)
 
-        self.vGenP["k"] = self.vGenP["k"].apply(lambda x: f"k{int(x+1):04d}")
+        self.vGenP["k"] = self.vGenP["k"].apply(lambda x: f"k{int(x + 1):04d}")
 
         # close the connection
         conn.close()
 
     else:
         raise ValueError("Invalid input type. Please choose either 'excel', 'sqlite' or V2G.")
-    
-    # add the coordinates in coords to the i dataframe
+
+    # Add the coordinates in coords to the i dataframe
     self.i = pd.merge(self.i, self.coords, left_on="values", right_on="values", how="left")
 
-    # iterate over pPmax and add the line number to the dataframe
-    for row_idx, row in enumerate(self.pPmax.itertuples(index=True)):  # Keep index for modification
-        node_set = {row.i, row.j}  # Use set for order-independent comparison
-
-        # Iterate over self.la DataFrame to find the matching line
-        for idx, line in enumerate(self.la.itertuples(index=False)):
-            if {line.i, line.j} == node_set:
-                # Update the corresponding row in vLineP
-                self.pPmax.at[row_idx, "line"] = str(int(idx))
-                break  # Stop searching once a match is found
-
-
-    # add to every line in vLineP the value divided by pPmax
+    # Add to every line in vLineP the value divided by pPmax
     self.vLineP["rel_values"] = abs(self.vLineP["values"]) / self.vLineP["line"].map(
         self.pPmax.set_index("line")["values"]
     )
     self.vLineP["pPmax"] = self.vLineP["line"].map(
         self.pPmax.set_index("line")["values"]
     )
- 
+
     # Compute bounds for map display
     self.bounds = [
         [min(self.i['lat']), min(self.i['lon'])],
