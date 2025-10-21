@@ -1,15 +1,15 @@
+import os
+import sys
+
 import dash
-from dash import dcc, html, Input, Output, ctx
 import dash_leaflet as dl
 import numpy as np
-import os
+from dash import dcc, html, Input, Output, ctx
+
 import helper_functions as h
+from MarkerJS import MarkerJS
 from data_loader import get_data
 from ui_handler import generate_network_map, generate_dynamic_plot
-import sys
-from MarkerJS import MarkerJS
-import pandas as pd
-
 
 
 class LEGO_GPT:
@@ -86,6 +86,14 @@ class LEGO_GPT:
             bounds (list): Bounds for the map visualization.
         """
 
+        self.vGenP = None
+        self.bounds = None
+        self.la = None
+        self.k = None
+        self.rp = None
+        self.long_format = None
+        self.i = None
+        self.app = None
 
         # Load configuration from this directory or from the provided path
         config = h.load_config("config.yml") if config_path is None else h.load_config(config_path)
@@ -105,14 +113,13 @@ class LEGO_GPT:
         if missing:
             raise ValueError(f"Missing required table(s): {', '.join(missing)}")
 
-
         self.load_data()  # Load data on initialization
-        self.js_generator = MarkerJS(self.map_options, self.vGenP)  # Create instance of MarkerJS with vGenP data for pie chart sizing
+        self.js_generator = MarkerJS(self.map_options,
+                                     self.vGenP)  # Create instance of MarkerJS with vGenP data for pie chart sizing
         self.create_app()  # Initialize Dash app
         self.setup_layout()  # Define layout
         self.setup_callbacks()  # Define callbacks
-  
-     
+
     def load_data(self, ):
         """
         Loads the necessary data for the application.
@@ -122,21 +129,10 @@ class LEGO_GPT:
         The dataframe containing the data about the buses is modified such that the index is set to "values" for easier indexing.
         """
         get_data(self)
-                # print out the all data attributes of the object
-        # print("Data attributes of the object:")
-        # for attr in dir(self):
-        #     if not attr.startswith("__") and not callable(getattr(self, attr)):
-        #         attr_value = getattr(self, attr)
-        #         # print the head if it is a dataframe
-        #         if isinstance(attr_value, (pd.DataFrame, pd.Series)):
-        #             print(f"{attr}:\n{attr_value.head()}")
 
-        # set index of self.i to "values" for simpler indexing
+        # Set index of self.i to "values" for simpler indexing
         self.i.set_index("values", inplace=True)
 
-
-      
-        
     def create_app(self):
         """
         Creates and initializes a Dash application instance.
@@ -195,7 +191,7 @@ class LEGO_GPT:
         """
 
         self.long_format = True if "rp" not in self.tables or (len(self.rp) == 1 and len(self.k) > 24) else False
-        display_time_range = 'block'  if self.long_format else 'none'
+        display_time_range = 'block' if self.long_format else 'none'
         display_rp = 'none' if self.long_format else 'block'
         if not self.long_format:
             options = [{"label": f"Period: {p}", "value": p} for p in self.rp["values"].values]
@@ -233,7 +229,7 @@ class LEGO_GPT:
                                         1: {'label': 'k0001'},
                                         len(self.k) // 2: {'label': f"k{len(self.k) // 2:04d}"},
                                         len(self.k): {'label': f"k{len(self.k):04d}"},
-                                    } # if self.long_format else {k: {'label': str(k)} for k in self.k}
+                                    }  # if self.long_format else {k: {'label': str(k)} for k in self.k}
                                 ),
                                 tooltip={"placement": "top", "always_visible": True},
                                 value=1,
@@ -262,7 +258,6 @@ class LEGO_GPT:
                     'min-width': '0',
                     'max-width': '50%'
                 }),
-
 
                 # Right side: Axis Dropdowns + Button (left-aligned within their container) + RangeSlider
                 html.Div([
@@ -309,21 +304,17 @@ class LEGO_GPT:
                                 {
                                     1: {'label': 'k0001'},
                                     len(self.k) // 2: {'label': f"k{len(self.k) // 2:04d}"},
-                                    len(self.k) : {'label': f"k{len(self.k) :04d}"},
-                                } 
+                                    len(self.k): {'label': f"k{len(self.k) :04d}"},
+                                }
                             ),
                             tooltip={"placement": "top", "always_visible": True},
-                            #allowCross=False,
+                            # allowCross=False,
                             value=[1, 24],
                             pushable=24,
-                            
+
                         ),
 
-                    ], style={'margin-right': '10px', "flex": "1","display": display_time_range}),
-
-
-
-
+                    ], style={'margin-right': '10px', "flex": "1", "display": display_time_range}),
 
                 ], style={
                     'display': 'flex',
@@ -354,14 +345,18 @@ class LEGO_GPT:
                                      attribution='&copy; <a href="https://carto.com/">CARTO</a>'),
                         html.Div(id="network-layer"),
                         html.Div(id="node-wrapper"),
-                    ], bounds=self.bounds, style={'height': '100%', 'width': '100%', 'background-color': '#6BA3A3'}, id="network-map",
-                    zoom=self.map_options["default_zoom"], center=[np.mean(self.i['lat']), np.mean(self.i['lon'])]),
+                    ], bounds=self.bounds, style={'height': '100%', 'width': '100%', 'background-color': '#6BA3A3'},
+                        id="network-map",
+                        zoom=self.map_options["default_zoom"], center=[np.mean(self.i['lat']), np.mean(self.i['lon'])]),
                 ], style={'flex': '1', 'min-width': '0', 'height': '90vh'}),
 
                 # Right Section: Graph
-                html.Div([                   
-                    dcc.Graph(id="dynamic-plot", style={'width': '100%', 'height': '100%', 'background-color': '#6BA3A3'}), # NOTE: this whole html.Div is replaced in the callback !!                  
-                ], id="dynamic-plot-container", style={'flex': '1', 'min-width': '0', 'height': '90vh', 'margin-top': '0px'})
+                html.Div([
+                    dcc.Graph(id="dynamic-plot",
+                              style={'width': '100%', 'height': '100%', 'background-color': '#6BA3A3'}),
+                    # NOTE: this whole html.Div is replaced in the callback !!                  
+                ], id="dynamic-plot-container",
+                    style={'flex': '1', 'min-width': '0', 'height': '90vh', 'margin-top': '0px'})
             ], style={'display': 'flex', 'gap': '10px', 'height': '90vh', 'flex-wrap': 'wrap'}),
         ], style={"background-color": "#6BA3A3", "padding": "10px"})
 
@@ -406,14 +401,14 @@ class LEGO_GPT:
 
         @self.app.callback(
             [
-             Output("network-layer", "children"),  
-             Output("node-wrapper", "children")],
+                Output("network-layer", "children"),
+                Output("node-wrapper", "children")],
             [
-             Input("rep-period-dropdown", "value"),
-             Input("time-slider", "value"),
-             Input("map-zoom", "data")
-            ],          
-             # prevent_initial_call=True
+                Input("rep-period-dropdown", "value"),
+                Input("time-slider", "value"),
+                Input("map-zoom", "data")
+            ],
+            # prevent_initial_call=True
         )
         def update_network(selected_period, selected_time, zoom_level):
             arrows, node_layer = generate_network_map(
@@ -423,7 +418,7 @@ class LEGO_GPT:
                 zoom_level=zoom_level,
             )
             return arrows, node_layer
-        
+
         @self.app.callback(
             Output("last-clicked-line", "data"),
             [Input(str(line.Index), "n_clicks") for line in self.la.itertuples(index=True)]
@@ -431,22 +426,22 @@ class LEGO_GPT:
         def store_last_clicked_line(*args):
             if not ctx.triggered:
                 return None
-            
+
             clicked_id = ctx.triggered[0]['prop_id'].split('.')[0]
             print(f"Clicked line: {clicked_id}")
             return clicked_id
 
         @self.app.callback(
             Output("last-clicked-node", "data"),
-            Input("node-layer", "clickData"),        
-            )
+            Input("node-layer", "clickData"),
+        )
         def store_last_clicked_node(click_data):
             if not click_data:
                 return dash.no_update
             clicked_id = click_data["properties"]["id"]
             print(f"Clicked node: {clicked_id}")
             return clicked_id
-        
+
         @self.app.callback(
             Output("time-slider", "value"),
             Output("time-slider-input", "value"),
@@ -463,7 +458,7 @@ class LEGO_GPT:
                 return slider_val, slider_val
             else:
                 return input_val, input_val
-               
+
         @self.app.callback(
             Output("local-button", "children"),
             Input("local-button", "n_clicks")
@@ -483,14 +478,14 @@ class LEGO_GPT:
 
         @self.app.callback(
             Output("dynamic-plot-container", "children"),
-            [Input("x-axis-dropdown", "value"), 
-             Input("y-axis-dropdown", "value"), 
+            [Input("x-axis-dropdown", "value"),
+             Input("y-axis-dropdown", "value"),
              Input("last-clicked-line", "data"),
              Input("last-clicked-node", "data"),
              Input("rep-period-dropdown", "value"),
              Input("local-button", "children"),
              Input("time-slider-range", "value")],
-             # prevent_initial_call=True
+            # prevent_initial_call=True
 
         )
         def update_dynamic_plot(x_axis, y_axis, line_idx, node_idx, selected_period, scope, time_range):
@@ -504,7 +499,7 @@ class LEGO_GPT:
                 scope=scope,
                 time_range=time_range
             )
-    
+
     def run(self):
         """
         Starts the application by running the Flask development server.
@@ -516,6 +511,7 @@ class LEGO_GPT:
             None
         """
         self.app.run(debug=False)
+
 
 if __name__ == "__main__":
     # check for passed config file (if calling from command line)
@@ -530,6 +526,3 @@ if __name__ == "__main__":
     else:
         # Run with specified config
         LEGO_GPT(config_path=config_path).run()
-
-
-
