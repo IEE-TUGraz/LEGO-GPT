@@ -4,30 +4,7 @@ import yaml
 import time
 import sqlite3
 
-def load_lat_lon(input_dir: str):
-    """
-    Loads latitude and longitude data from an Excel file.
-    This function reads an Excel file named "Power_BusInfo.xlsx" located in the specified 
-    input directory. It extracts data from the sheet named "Power BusInfo", starting from 
-    row 7 (zero-indexed). The function selects specific columns, renames them, and returns 
-    the resulting DataFrame.
-    Args:
-        input_dir (str): The directory path where the "Power_BusInfo.xlsx" file is located.
-    Returns:
-        pandas.DataFrame: A DataFrame containing three columns:
-            - "values": Data from column 1 of the Excel sheet.
-            - "lat": Latitude data from column 12 of the Excel sheet.
-            - "lon": Longitude data from column 13 of the Excel sheet.
-    """
-    sheetname = "Power BusInfo"
-    filename = os.path.join(input_dir, "Power_BusInfo.xlsx")
-    start_row = 7
-    df = pd.read_excel(filename, sheet_name=sheetname, skiprows=start_row-1, header=None)
-    df = df[[1, 12, 13]]
-    df.columns = ["values", "lat", "lon"]
-  
-    return df
-
+def extract_table_to_dataframe(con: sqlite3.Connection, table_name: str) -> Optional[pd.DataFrame]:
 def extract_table_to_dataframe(con: sqlite3.Connection, table_name: str) -> pd.DataFrame:
     """
     Extracts the contents of a database table into a pandas DataFrame.
