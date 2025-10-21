@@ -35,227 +35,190 @@ def extract_table_to_dataframe(con: sqlite3.Connection, table_name: str) -> Opti
         return None
 
 
+def extract_excel_to_dataframe(input_dir: str, table: str) -> pd.DataFrame | tuple:
     """
     Extract data from Excel files into a pandas DataFrame based on the specified table type.
-    This function processes various Excel files and sheets, extracting and transforming data 
-    into pandas DataFrames according to the provided `table` parameter. The function supports 
+    This function processes various Excel files and sheets, extracting and transforming data
+    into pandas DataFrames according to the provided `table` parameter. The function supports
     multiple table types, each corresponding to a specific data extraction and transformation logic.
 
     Parameters:
 
         input_dir (str): The directory containing the input Excel files.
         table (str): The type of table to extract. Supported values are:
-        
-            - "i": Extracts data from "Power_BusInfo.xlsx" (sheet "Power BusInfo").
-            - "rp": Extracts unique values from "results.xlsx" (sheet "TotalEnrp").
-            - "k": Extracts unique values from "results.xlsx" (sheet "TotalEnrp").
-            - "gi": Combines data from multiple Excel files ("Power_VRES", "Power_ThermalGen", 
+
+            - "i": Extracts data from "Power_BusInfo.xlsx".
+            - "rp": Extracts unique values from "Power_WeightsRP.xlsx".
+            - "k": Extracts unique values from "Power_WeightsK.xlsx".
+            - "gi": Combines data from multiple Excel files ("Power_VRES", "Power_ThermalGen",
               "Power_Storage", "Power_RoR") into a DataFrame with columns "g" and "i".
-            - "vLineP": Processes line data from "results.xlsx" (sheet "pLineP") and returns 
+            - "vLineP": Processes line data from "model.xlsx" (sheet "vLineP") and returns
               two DataFrames: one for the main data and one for line tuples.
-            - "coords": Extracts coordinates (longitude and latitude) from "Power_BusInfo.xlsx" 
-              (sheet "Power BusInfo").
-            - "vGenP": Processes generator data from "results.xlsx" (sheet "GenP") into a long-format DataFrame.
-            - "pPmax": Extracts power network data from "Power_Network.xlsx" (sheet "Power Network").
+            - "coords": Extracts coordinates (longitude and latitude) from "Power_BusInfo.xlsx".
+            - "vGenP": Processes generator data from "model.xlsx" into a long-format DataFrame.
+            - "pPmax": Extracts power network data from "Power_Network.xlsx".
             - "pDemand": Placeholder for future implementation.
 
     Returns:
 
-        pandas.DataFrame or tuple: 
+        pandas.DataFrame or tuple:
             - For most table types, returns a single DataFrame containing the extracted data.
             - For "vLineP", returns a tuple of two DataFrames: (main data, line tuples).
             - For "gi", returns a tuple of two DataFrames: (main data, unique "g" values).
             - Returns None if the table type is invalid or not yet implemented.
     Note:
-    
+
         - The function uses hardcoded file and sheet names for specific table types.
-        - Some table types include additional preprocessing steps, such as removing duplicates 
-          or resetting the index.
-        - For "vLineP" and "vGenP", the function includes performance timing for processing.
+        - Some table types include additional preprocessing steps, such as removing duplicates or resetting the index.
 
     Raises:
         FileNotFoundError: If the specified Excel files or sheets are not found.
         ValueError: If the table type is invalid or not supported.
     """
 
+    df, df_lines, df_g = None, None, None
+
     if table == "i":
         filename = os.path.join(input_dir, "Power_BusInfo.xlsx")
-        sheetname = "Power BusInfo"
-        start_row = 7
-        use_cols = "B"
-        df = pd.read_excel(filename, sheet_name=sheetname, skiprows=start_row-1, usecols=use_cols, header=None)
+        skiprows = 7
+        use_cols = "C"
+        df = pd.read_excel(filename, skiprows=skiprows, usecols=use_cols, header=None)
         df.columns = ["values"]
+        df = df.drop_duplicates()
 
     elif table == "rp":
-        filename = os.path.join(input_dir, "results", "results.xlsx")
-        sheetname = "TotalEnrp"
-        start_row = 1
-        use_cols = "A"
-        df = pd.read_excel(filename, sheet_name=sheetname, skiprows=start_row, usecols=use_cols, header=None)
+        filename = os.path.join(input_dir, "Power_WeightsRP.xlsx")
+        skiprows = 7
+        use_cols = "C"
+        df = pd.read_excel(filename, skiprows=skiprows, usecols=use_cols, header=None)
         df.columns = ["values"]
-        # only take unique values
         df = df.drop_duplicates()
-        # reset index
-        df.reset_index(drop=True, inplace=True)
 
     elif table == "k":
-        filename = os.path.join(input_dir, "results", "results.xlsx")
-        sheetname = "TotalEnrp"
-        start_row = 1
-        use_cols = "B"
-        df = pd.read_excel(filename, sheet_name=sheetname, skiprows=start_row, usecols=use_cols, header=None)
+        filename = os.path.join(input_dir, "Power_WeightsK.xlsx")
+        skiprows = 7
+        use_cols = "C"
+        df = pd.read_excel(filename, skiprows=skiprows, usecols=use_cols, header=None)
         df.columns = ["values"]
-        # only take unique values
         df = df.drop_duplicates()
-        # reset index
-        df.reset_index(drop=True, inplace=True)
 
     elif table == "gi":
-        filenames = [os.path.join(input_dir, tech + ".xlsx") for tech in ["Power_VRES", "Power_ThermalGen", "Power_Storage", "Power_RoR"]]
-        sheetnames = ["Power VRES", "Power ThermalGen", "Power Storage", "Power RoR"]
-        use_cols = "B,C,D"
+        filenames = [os.path.join(input_dir, tech + ".xlsx") for tech in
+                     ["Power_VRES", "Power_ThermalGen", "Power_Storage"]]  # TODO: Power_ROR?
         skiprows = 7
+        use_cols = "C,D,E"
         df = pd.DataFrame(columns=["g", "tec", "i"])
-        for filename, sheetname in zip(filenames, sheetnames):
-            temp_df = pd.read_excel(filename, sheet_name=sheetname, usecols=use_cols, skiprows=skiprows-1, header=None)
+        for filename in filenames:
+            temp_df = pd.read_excel(filename, skiprows=skiprows, usecols=use_cols, header=None)
             temp_df.columns = ["g", "tec", "i"]
             df = pd.concat([df, temp_df], ignore_index=True)
         # reset index
         df.reset_index(drop=True, inplace=True)
         df_g = df[["g"]].drop_duplicates().reset_index(drop=True)
 
+    elif table == "coords":
+        filename = os.path.join(input_dir, "Power_BusInfo.xlsx")
+        start_row = 7
+        use_cols = "C,M,N"
+        df = pd.read_excel(filename, skiprows=start_row, usecols=use_cols, header=None)
+        df.columns = ["values", "lat", "lon"]
+        # set index to i
+        df.set_index("values", inplace=True)
+
+
     elif table == "vLineP":
+        filename = os.path.join(input_dir, "model.xlsx")
+        sheet_name = "vLineP"
 
-        start = time.time()
-        filename = os.path.join(input_dir, "results", "results.xlsx")
-        sheetname = "pLineP"
+        # Load the data
+        df = pd.read_excel(filename, sheet_name=sheet_name)
 
-        # Step 1: Load header rows
-        header_df = pd.read_excel(filename, sheet_name=sheetname, header=None, nrows=3)
-        i_list = header_df.iloc[0, 2:].tolist()
-        j_list = header_df.iloc[1, 2:].tolist()
-        c_list = header_df.iloc[2, 2:].tolist()
+        # Standardize column names
+        df.columns = ["rp", "k", "i", "j", "c", "vLineP"]
 
-        # Step 2: Load the rest of the data
-        data_df = pd.read_excel(filename, sheet_name=sheetname, header=None, skiprows=3)
+        df = df.rename(columns={"vLineP": "values"})
 
-        # Step 3: Preprocess unique line tuples with direction
-        line_index_dict = {}  # frozenset(i,j) -> line index
-        line_list = []        # list of [i, j] in order
-        records = []
-
-        for idx, (i, j) in enumerate(zip(i_list, j_list)):
-            ij_key = frozenset([i, j])
+        # Generate unique line index (direction-insensitive)
+        line_index_dict = {}
+        line_list = []
+        line_indices = []
+        for idx, row in df.iterrows():
+            ij_key = frozenset([row["i"], row["j"]])
             if ij_key not in line_index_dict:
                 line_index_dict[ij_key] = len(line_index_dict)
-                line_list.append([i, j])
+                line_list.append([row["i"], row["j"]])
+            line_indices.append(line_index_dict[ij_key])
 
-        # Step 4: Main loop (fast, flat)
-        for row in data_df.itertuples(index=False):
-            rp = row[0]
-            k = row[1]
-            values = row[2:]
+        df["line"] = line_indices
 
-            for idx, value in enumerate(values):
-                i = i_list[idx]
-                j = j_list[idx]
-                c = c_list[idx]
-                ij_key = frozenset([i, j])
-                line = line_index_dict[ij_key]
-                is_duplicate = [i, j] != line_list[line]
+        # Detect duplicates (direction differences)
+        df["duplicate"] = [
+            [row.i, row.j] != line_list[df.loc[idx, "line"]]
+            for idx, row in df.iterrows()
+        ]
 
-                records.append({
-                    'rp': rp,
-                    'k': k,
-                    'i': i,
-                    'j': j,
-                    'c': c,
-                    'values': value,
-                    'line': str(line),
-                    'duplicate': is_duplicate
-                })
+        # Rename for consistency with other tables
+        df_lines = pd.DataFrame(line_list, columns=["i", "j"])
 
-        # Final outputs
-        df = pd.DataFrame.from_records(records)
-        df_lines = pd.DataFrame(line_list, columns=['i', 'j'])
-
-        end = time.time()
-        print(f"Time taken to process vLineP: {end - start:.2f} seconds")
-
-    elif table =="coords":
-        filename = os.path.join(input_dir, "Power_BusInfo.xlsx")
-        sheetname = "Power BusInfo"
-        start_row = 7
-        use_cols = "B,L,M"
-        df = pd.read_excel(filename, sheet_name=sheetname, skiprows=start_row-1, usecols=use_cols, header=None)
-        df.columns = ["values", "lon", "lat"]
-        # set index to id
-        df.set_index("values", inplace=True)
-    
     elif table == "vGenP":
+        filename = os.path.join(input_dir, "model.xlsx")
+        sheet_name = "vGenP"
 
-        start = time.time()
-        filename = os.path.join(input_dir, "results", "results.xlsx")
-        sheetname = "GenP"
+        # Load the data
+        df = pd.read_excel(filename, sheet_name=sheet_name)
 
-        # Step 1: Load data once
-        raw_df = pd.read_excel(filename, sheet_name=sheetname, header=None)
+        # Standardize column names
+        df.columns = ["rp", "k", "g", "vGenP"]
 
-        # Step 2: Extract header and data
-        g_list = raw_df.iloc[0, 1:].tolist()  # generators
-        data_df = raw_df.iloc[1:, :]          # rest of the rows
-        
-
-        # Step 3: Rename columns
-        data_df.columns = ['h'] + g_list
-        data_df = data_df.copy()  # ← ensures it's a real copy, not a slice view
-        # Step 4: Create 'k' column from 'h'
-        data_df['k'] = data_df['h'].apply(lambda h: 'k' + h[1:] if isinstance(h, str) and h.startswith('h') else h)
-        data_df['rp'] = 'rp01'  # Hardcoded for now
-
-
-
-        # Step 5: Melt the data into long format
-        df = pd.melt(
-            data_df,
-            id_vars=['rp', 'k'],
-            value_vars=g_list,
-            var_name='g',
-            value_name='values'
-        )
-
-
-        # Optional: reorder columns
-        df = df[['rp', 'k', 'g', 'values']]
-
-        end = time.time()
-        print(f"Time taken to process vGenP: {end - start:.2f} seconds")
+        # Rename for consistency with other tables
+        df = df.rename(columns={"vGenP": "values"})
+        df = df[["rp", "k", "g", "values"]]
 
     elif table == "pPmax":
         filename = os.path.join(input_dir, "Power_Network.xlsx")
-        sheetname = "Power Network"
 
         start_row = 7
-        use_cols = "B,C,K"
-        df = pd.read_excel(filename, sheet_name=sheetname, skiprows=start_row-1, usecols=use_cols, header=None)
+        use_cols = "C,D,K"
+        df = pd.read_excel(filename, skiprows=start_row, usecols=use_cols, header=None)
         df.columns = ["i", "j", "values"]
 
-    elif table == "pDemand":
+        line_index_dict = {}
+        line_list = []
+        line_indices = []
+
+        for _, row in df.iterrows():
+            ij_key = frozenset([row["i"], row["j"]])
+            if ij_key not in line_index_dict:
+                line_index_dict[ij_key] = len(line_index_dict)
+                line_list.append([row["i"], row["j"]])
+            line_indices.append(line_index_dict[ij_key])
+
+        df["line"] = line_indices
+
+        df = (
+            df.groupby("line", as_index=False)["values"]
+            .mean()
+        )
+
+    elif table == "pDemand":  # TODO
         pass
-    
+
     elif table == "vStIntraRes":
-        filepath = os.path.join(input_dir, "results", "results.xlsx")
-        sheetname = "StIntra"
-                # Read the Excel file with multi-index columns and row index for k
-        df = pd.read_excel(filepath, sheet_name=sheetname, header=[0, 1], index_col=0)
+        filename = os.path.join(input_dir, "model.xlsx")
+        sheet_name = "vStIntraRes"
 
-        # Convert to long format
-        df_long = df.stack(level=[0, 1], future_stack=True).reset_index()
+        # Load the data
+        df = pd.read_excel(filename, sheet_name=sheet_name)
 
-        # Rename columns to match desired output
-        df_long.columns = ['k', 'storageUnits', 'rp', 'values']
-        print(df_long.head())
-        return df_long
+        # Standardize column names
+        df.columns = ["rp", "k", "storageUnits", "vStIntraRes"]
+
+        # Rename for consistency with other tables
+        df = df.rename(columns={"vStIntraRes": "values"})
+
+        # Reorder columns to match old structure
+        df = df[["rp", "k", "storageUnits", "values"]]
+
     else:
         print(f"Table {table} not yet implemented or invalid.")
         df = None
@@ -265,7 +228,7 @@ def extract_table_to_dataframe(con: sqlite3.Connection, table_name: str) -> Opti
     elif table == "gi":
         return df, df_g
     else:
-        return df 
+        return df
 
 
 def copy_default_config(config_path: str = "config.yml", default_config_path: str = "config_template.yml") -> None:
