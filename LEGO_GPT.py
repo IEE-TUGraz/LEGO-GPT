@@ -226,6 +226,15 @@ class LEGO_GPT:
                         ),
                     ], style={'margin-right': '20px'}),
 
+                    # === vLineP/vLineQ Toggle Button ===
+                    html.Div([
+                        html.Button("vLineP", id="pq-toggle-button", n_clicks=0, style={
+                            'minWidth': '50px',
+                            'padding': '6px 12px',
+                            'font-weight': 'bold',
+                        }),
+                    ], style={'margin-right': '20px'}),
+
                     # === Time Slider + Optional Number Input ===
                     html.Div([
                         # Slider
@@ -413,16 +422,20 @@ class LEGO_GPT:
             [
                 Input("rep-period-dropdown", "value"),
                 Input("time-slider", "value"),
-                Input("map-zoom", "data")
+                Input("map-zoom", "data"),
+                Input("network-map", "viewport"),
+                Input("pq-toggle-button", "children")
             ],
-            # prevent_initial_call=True
         )
-        def update_network(selected_period, selected_time, zoom_level):
+        def update_network(selected_period, selected_time, zoom_level, viewport, pq_mode):
+            if viewport and 'zoom' in viewport:
+                zoom_level = viewport['zoom']
             arrows, node_layer = generate_network_map(
                 self=self,
                 selected_period=selected_period,
                 selected_time=selected_time,
                 zoom_level=zoom_level,
+                pq_mode=pq_mode,
             )
             return arrows, node_layer
 
@@ -484,6 +497,16 @@ class LEGO_GPT:
                 return "Local"
             else:
                 return "Global"
+
+        @self.app.callback(
+            Output("pq-toggle-button", "children"),
+            Input("pq-toggle-button", "n_clicks")
+        )
+        def toggle_pq_label(n_clicks):
+            if n_clicks % 2 == 0:
+                return "vLineP"
+            else:
+                return "vLineQ"
 
         @self.app.callback(
             Output("map-zoom", "data"),

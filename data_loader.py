@@ -163,6 +163,9 @@ def get_data(obj):
                     df, df_lines = h.extract_excel_to_dataframe(self.input_dir, table)
                     self.vLineP = df
                     self.la = df_lines
+                elif table == "vLineQ":
+                    df, df_lines = h.extract_excel_to_dataframe(self.input_dir, table)
+                    self.vLineQ = df
                 elif table == "gi":
                     df, df_g = h.extract_excel_to_dataframe(self.input_dir, table)
                     self.gi = df
@@ -173,6 +176,11 @@ def get_data(obj):
                     # Load the data as variable with the table name
                     setattr(self, table, h.extract_excel_to_dataframe(self.input_dir, table))
             self.coords = h.extract_excel_to_dataframe(self.input_dir, "coords")
+
+            # Only take values where duplicate is False for vLineQ
+            if hasattr(self, "vLineQ"):
+                self.vLineQ = self.vLineQ[self.vLineQ["duplicate"] == False].copy()
+                self.vLineQ.drop(columns=["duplicate"], inplace=True)
 
             # Only take values where duplicate is False
             self.vLineP = self.vLineP[self.vLineP["duplicate"] == False].copy()
@@ -479,6 +487,15 @@ def get_data(obj):
     self.vLineP["pPmax"] = self.vLineP["line"].map(
         self.pPmax.set_index("line")["values"]
     )
+
+    # Add to every line in vLineQ the value divided by pPmax
+    if hasattr(self, "vLineQ"):
+        self.vLineQ["rel_values"] = abs(self.vLineQ["values"]) / self.vLineQ["line"].map(
+            self.pPmax.set_index("line")["values"]
+        )
+        self.vLineQ["pPmax"] = self.vLineQ["line"].map(
+            self.pPmax.set_index("line")["values"]
+        )
 
     # Compute bounds for map display
     self.bounds = [

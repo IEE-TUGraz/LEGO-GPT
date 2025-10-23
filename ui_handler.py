@@ -3,17 +3,17 @@ import dash_leaflet as dl
 import matplotlib.pyplot as plt
 import pandas as pd
 import random
-import uuid  
+import uuid
 
 import plotly.express as px
 from dash import html, dcc
 import dash_leaflet.express as dlx
 import math
-import warnings  
+import warnings
 from plot_definitions import generate_plot
 
 
-def generate_network_map(self, selected_period: str, selected_time: int, zoom_level: int) -> tuple:
+def generate_network_map(self, selected_period: str, selected_time: int, zoom_level: int, pq_mode: str = "vLineP") -> tuple:
     """
     Generates a network map visualization using power flow data and bus locations.
     
@@ -37,11 +37,14 @@ def generate_network_map(self, selected_period: str, selected_time: int, zoom_le
     technology_colors = self.map_options["technology_colors"]
     cluster_options = self.map_options["cluster_options"]
 
+    # Select data based on vLineP or vLineQ mode
+    vLine_data = self.vLineP if pq_mode == "vLineP" else self.vLineQ if hasattr(self, "vLineQ") else self.vLineP
+
     if self.long_format:
-        vLineP_filtered = self.vLineP[self.vLineP["k"] == selected_time]
+        vLineP_filtered = vLine_data[vLine_data["k"] == selected_time]
         vGenP_filtered = self.vGenP[self.vGenP["k"] == selected_time]
     else:
-        vLineP_filtered = self.vLineP[(self.vLineP["rp"] == selected_period) & (self.vLineP["k"] == selected_time)]
+        vLineP_filtered = vLine_data[(vLine_data["rp"] == selected_period) & (vLine_data["k"] == selected_time)]
         vGenP_filtered = self.vGenP[(self.vGenP["rp"] == selected_period) & (self.vGenP["k"] == selected_time)]
 
     # Generate positions and colors
@@ -82,8 +85,8 @@ def generate_network_map(self, selected_period: str, selected_time: int, zoom_le
             positions=i_pos,
             color="black",
             weight=line_weight,
-            opacity = 0,  
-            id=f"line_base-{line_id}",    
+            opacity = 0,
+            id=f"line_base-{line_id}",
             n_clicks=0
         )
 
@@ -92,10 +95,10 @@ def generate_network_map(self, selected_period: str, selected_time: int, zoom_le
             positions=i_pos,
             color=color,
             weight=line_weight,
-            id=f"{line_id}",  
+            id=f"{line_id}",
             children=[
             dl.Popup(f"Power Flow: {abs(flow_val):.1f} MW, Line rating: {vLineP_filtered.iloc[idx]['pPmax']:.1f} MW")
-            ],       
+            ],
             n_clicks=0
         )
 
@@ -110,7 +113,7 @@ def generate_network_map(self, selected_period: str, selected_time: int, zoom_le
                     pathOptions=dict(stroke=True, color=color)
                 )
             )],
-            children=[polyline_base],  
+            children=[polyline_base],
             n_clicks=0
         )
 
@@ -149,7 +152,7 @@ def generate_dynamic_plot(self, x_axis: str, y_axis: str, line_idx: str, node_id
 
 
     print(f"Updating plot: x_axis={x_axis}, y_axis={y_axis}, selected_period={selected_period}, selected_time_range={time_range}, local_node={node_idx}, local_line={line_idx}, scope={scope}")
-    
+
     fig = generate_plot(
         self,
         x_axis=x_axis,
@@ -193,19 +196,19 @@ def generate_node_layer(buses: pd.DataFrame, gi: pd.DataFrame, vGenP_filtered: p
         merged.groupby(["i", "tec"])["values"]
         .sum()
         .reset_index()
-    ) 
+    )
     pivoted = grouped.pivot(index="i", columns="tec", values="values").fillna(0)
     pivoted.reset_index(inplace=True)
     pivoted = pivoted.merge(buses, left_on="i", right_on="values", how="left")
     # check if any bus from set i is missing in column i
-    missing_buses =  set(buses.index) - set(pivoted["i"]) 
+    missing_buses =  set(buses.index) - set(pivoted["i"])
     if missing_buses:
         # append the missing buses with their coordinates and 0 values
         for bus in missing_buses:
             lat = buses.loc[buses.index == bus, "lat"].values[0]
             lon = buses.loc[buses.index == bus, "lon"].values[0]
             pivoted = pd.concat([pivoted, pd.DataFrame([{"i": bus, "lat": lat, "lon": lon}])], ignore_index=True)
-    
+
     if "unknown" not in technology_colors.keys():
         # Add a default color for unknown technologies
         technology_colors["unknown"] = "#808080"  # grey color
@@ -230,7 +233,7 @@ def generate_node_layer(buses: pd.DataFrame, gi: pd.DataFrame, vGenP_filtered: p
                 else:
                     colors.append(technology_colors[tec])
                 values.append(round(val, 1))  # round values to 1 decimal place       
-                labels.append(tec)         
+                labels.append(tec)
                 total += val
 
         if pd.isna(row["lat"]) or pd.isna(row["lon"]):
@@ -258,7 +261,7 @@ def generate_node_layer(buses: pd.DataFrame, gi: pd.DataFrame, vGenP_filtered: p
 
     # Return GeoJSON layer
     return dl.GeoJSON(
-        id="node-layer",                     
+        id="node-layer",
         data=geobuf,
         format='geobuf',
         cluster=True,

@@ -160,6 +160,40 @@ def extract_excel_to_dataframe(input_dir: str, table: str) -> pd.DataFrame | tup
         # Rename for consistency with other tables
         df_lines = pd.DataFrame(line_list, columns=["i", "j"])
 
+    elif table == "vLineQ":
+        filename = os.path.join(input_dir, "model.xlsx")
+        sheet_name = "vLineQ"
+
+        # Load the data
+        df = pd.read_excel(filename, sheet_name=sheet_name)
+
+        # Standardize column names
+        df.columns = ["rp", "k", "i", "j", "c", "vLineQ"]
+
+        df = df.rename(columns={"vLineQ": "values"})
+
+        # Generate unique line index (direction-insensitive)
+        line_index_dict = {}
+        line_list = []
+        line_indices = []
+        for idx, row in df.iterrows():
+            ij_key = frozenset([row["i"], row["j"]])
+            if ij_key not in line_index_dict:
+                line_index_dict[ij_key] = len(line_index_dict)
+                line_list.append([row["i"], row["j"]])
+            line_indices.append(line_index_dict[ij_key])
+
+        df["line"] = line_indices
+
+        # Detect duplicates (direction differences)
+        df["duplicate"] = [
+            [row.i, row.j] != line_list[df.loc[idx, "line"]]
+            for idx, row in df.iterrows()
+        ]
+
+        # Rename for consistency with other tables
+        df_lines = pd.DataFrame(line_list, columns=["i", "j"])
+
     elif table == "vGenP":
         filename = os.path.join(input_dir, "model.xlsx")
         sheet_name = "vGenP"
@@ -223,7 +257,7 @@ def extract_excel_to_dataframe(input_dir: str, table: str) -> pd.DataFrame | tup
         print(f"Table {table} not yet implemented or invalid.")
         df = None
 
-    if table == "vLineP":
+    if table == "vLineP" or table == "vLineQ":
         return df, df_lines
     elif table == "gi":
         return df, df_g
