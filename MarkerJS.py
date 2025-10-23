@@ -2,6 +2,7 @@ from dash_extensions.javascript import assign
 import pandas as pd
 import numpy as np
 
+
 class MarkerJS:
     """
     MarkerJS is a class designed to generate custom Leaflet markers and clusters with pie chart visualizations. 
@@ -42,7 +43,7 @@ class MarkerJS:
                 map_options dictionary.
         """
 
-        self.scale_factor = 1 / (np.sqrt(vGenP['values']).mean() )
+        self.scale_factor = 1 / (np.sqrt(vGenP['values']).mean())
         self.min_radius = map_options["pie_chart_min_radius"]
 
     @staticmethod
@@ -78,7 +79,7 @@ class MarkerJS:
             The returned JavaScript function can be embedded in an HTML file or executed in a 
             JavaScript environment to generate a pie chart SVG.
             """
-        
+
         return """
         function pieSVG(opt) {
             function getCoords(cx, cy, radius, angle) {
@@ -148,13 +149,17 @@ class MarkerJS:
 
     def pointToLayer(self):
         """
-        Creates a Leaflet marker with a custom pie chart icon and binds a tooltip to it.
+        Creates a Leaflet marker with a custom pie chart icon and permanent node label.
+
         This method generates a JavaScript function that defines how GeoJSON points 
         are converted into Leaflet markers. Each marker is represented by a pie chart 
-        icon, which is dynamically created based on the feature's properties.
+        icon with a permanent text label below it, which is dynamically created based 
+        on the feature's properties.
+
         Returns:
             str: A JavaScript function as a string that defines the point-to-layer 
             behavior for Leaflet.
+
         The generated JavaScript function performs the following:
         - Extracts `values`, `colors`, and `labels` from the feature's properties.
         - Calculates the total of the `values` array and determines the radius of 
@@ -164,15 +169,17 @@ class MarkerJS:
         - Configures the icon's size and anchor point based on the calculated radius.
         - Creates a Leaflet marker at the given latitude and longitude (`latlng`) 
           with the custom icon.
-        - Binds a tooltip to the marker, displaying the feature's name and a 
-          breakdown of the values with corresponding colors and labels.
+        - Binds two tooltips: one permanent tooltip showing just the node name below 
+          the marker, and one hover tooltip with detailed information.
+
         Note:
             - The `pieSVG` function is expected to generate the SVG representation 
               of the pie chart.
             - The `self.min_radius` and `self.scale_factor` attributes are used to 
               calculate the pie chart's radius.
+            - The node name is permanently displayed below the pie chart icon using
+              a permanent Leaflet tooltip.
         """
-
 
         return assign(f"""function(feature, latlng) {{
         {self.pie_svg()}
@@ -180,6 +187,7 @@ class MarkerJS:
         const values = feature.properties.values;
         const colors = feature.properties.colors;
         const labels = feature.properties.labels;
+        const nodeName = feature.properties.name;
         const total = values.reduce((a, b) => a + b, 0);
         const radius = {self.min_radius} + Math.sqrt(total) * {self.scale_factor:.6f};
         const scale = radius * 2.5;
@@ -199,40 +207,79 @@ class MarkerJS:
         }});
 
         const marker = L.marker(latlng, {{ icon: icon }});
+
+        // Permanent tooltip showing node name below the marker
         marker.bindTooltip(
-            `<b>${{feature.properties.name}}</b><br/>` +
-            values.map((val, i) => {{
-                const color = colors[i];
-                const label = labels[i];
-                return `<span style="color:${{color}}">&#9679;</span> ${{label}}: ${{val}}`;
-            }}).join("<br/>"),
+            `<div style="font-weight: bold; font-size: 11px; color: black; text-align: center;">${{nodeName}}</div>`,
             {{
-                direction: 'top',
-                offset: [0, -scale / 2],
-                opacity: 0.9
+                permanent: true,
+                direction: 'bottom',
+                offset: [0, scale / 2 + 5],
+                opacity: 0.9,
+                className: 'node-label-tooltip'
             }}
         );
+
+        // Hover tooltip with detailed information
+        marker.on('mouseover', function(e) {{
+            this.unbindTooltip();
+            this.bindTooltip(
+                `<b>${{nodeName}}</b><br/>` +
+                values.map((val, i) => {{
+                    const color = colors[i];
+                    const label = labels[i];
+                    return `<span style="color:${{color}}">&#9679;</span> ${{label}}: ${{val}}`;
+                }}).join("<br/>"),
+                {{
+                    permanent: false,
+                    direction: 'top',
+                    offset: [0, -scale / 2],
+                    opacity: 0.9
+                }}
+            ).openTooltip();
+        }});
+
+        marker.on('mouseout', function(e) {{
+            this.unbindTooltip();
+            this.bindTooltip(
+                `<div style="font-weight: bold; font-size: 11px; color: black; text-align: center;">${{nodeName}}</div>`,
+                {{
+                    permanent: true,
+                    direction: 'bottom',
+                    offset: [0, scale / 2 + 5],
+                    opacity: 0.9,
+                    className: 'node-label-tooltip'
+                }}
+            );
+        }});
+
         return marker;
     }}""")
-    
+
     def clusterToLayer(self):
         """
         Generates a JavaScript function to create a custom Leaflet marker cluster layer.
+
         This method constructs a JavaScript function that defines how to render a cluster
         of markers on a Leaflet map. It uses pie chart SVGs to visually represent the 
         aggregated data within each cluster. The function is returned as a string and 
         can be used in a JavaScript context.
+
         Returns:
             str: A JavaScript function as a string that defines the behavior and appearance
                  of marker clusters on a Leaflet map.
+
         The generated JavaScript function performs the following:
         - Aggregates data from the cluster's leaves (individual markers).
         - Calculates the total values and proportions for each category in the cluster.
         - Dynamically generates a pie chart SVG to represent the data distribution.
         - Creates a custom Leaflet marker with the pie chart as its icon.
-        - Binds a tooltip to the marker displaying detailed information about the cluster.
-        """
+        - Binds a compact hover tooltip with cluster information.
 
+        Note:
+            - Clusters do not display permanent labels.
+            - Tooltip is compact and semi-transparent to avoid covering other nodes.
+        """
 
         return assign(f"""function(feature, latlng, index, context) {{
         {self.pie_svg()}
@@ -281,20 +328,20 @@ class MarkerJS:
             }});
 
             const marker = L.marker(latlng, {{ icon: icon }});
+
+            // Compact hover tooltip with limited information
+            const tooltipContent = `<div style="font-size: 10px; padding: 2px 4px;"><b>Cluster (${{leaves.length}})</b></div>`;
+
             marker.bindTooltip(
-                `Cluster of ${{leaves.length}} Sites<br/>` +
-                orderedValues.map((val, i) => {{
-                    const color = orderedColors[i];
-                    const label = orderedLabels[i];
-                    return `<span style="color:${{color}}">&#9679;</span> ${{label}}: ${{val.toFixed(1)}}`;
-                }}).join("<br/>"),
+                tooltipContent,
                 {{
+                    permanent: false,
                     direction: 'top',
-                    offset: [0, -scale / 2],
-                    opacity: 0.9
+                    offset: [0, -scale / 2 - 5],
+                    opacity: 0.75,
+                    className: 'compact-cluster-tooltip'
                 }}
             );
 
             return marker;
         }}""")
-           
