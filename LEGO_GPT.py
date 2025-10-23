@@ -215,6 +215,17 @@ class LEGO_GPT:
                         ),
                     ], style={'margin-right': '20px', 'display': display_rp}),
 
+                    # === Node Search Dropdown ===
+                    html.Div([
+                        dcc.Dropdown(
+                            id='node-search-dropdown',
+                            options=[{'label': node, 'value': node} for node in self.i.index],
+                            placeholder='Search node...',
+                            clearable=True,
+                            style={'width': '150px', 'font-weight': 'bold'},
+                        ),
+                    ], style={'margin-right': '20px'}),
+
                     # === Time Slider + Optional Number Input ===
                     html.Div([
                         # Slider
@@ -339,18 +350,18 @@ class LEGO_GPT:
                     dl.Map(children=[
                         dl.TileLayer(url='https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
                                      attribution='&copy; <a href="https://carto.com/">CARTO</a>'),
+                        dl.ZoomControl(position='topright'),
                         html.Div(id="network-layer"),
                         html.Div(id="node-wrapper"),
                     ], bounds=self.bounds, style={'height': '100%', 'width': '100%', 'background-color': '#6BA3A3'},
-                        id="network-map",
-                        zoom=self.map_options["default_zoom"], center=[np.mean(self.i['lat']), np.mean(self.i['lon'])]),
+                        id="network-map", zoomControl=False, center=[np.mean(self.i['lat']), np.mean(self.i['lon'])]),
                 ], style={'flex': '1', 'min-width': '0', 'height': '90vh'}),
 
                 # Right Section: Graph
                 html.Div([
                     dcc.Graph(id="dynamic-plot",
                               style={'width': '100%', 'height': '100%', 'background-color': '#6BA3A3'}),
-                    # NOTE: this whole html.Div is replaced in the callback !!                  
+                    # NOTE: this whole html.Div is replaced in the callback !!
                 ], id="dynamic-plot-container",
                     style={'flex': '1', 'min-width': '0', 'height': '90vh', 'margin-top': '0px'})
             ], style={'display': 'flex', 'gap': '10px', 'height': '90vh', 'flex-wrap': 'wrap'}),
@@ -362,21 +373,21 @@ class LEGO_GPT:
         This method defines multiple callbacks to handle user interactions and update
         the application state dynamically. The callbacks include:
 
-        1. `update_network`: Updates the network map based on the selected period, 
+        1. `update_network`: Updates the network map based on the selected period,
             time, and zoom level.
             - Outputs: Updates the "children" property of the "network-map" component.
             - Inputs: "rep-period-dropdown" value, "time-slider" value, and "map-zoom" data.
         2. `store_last_clicked_line`: Stores the ID of the last clicked line.
             - Outputs: Updates the "data" property of the "last-clicked-line" component.
             - Inputs: Click events for each line in the dataset.
-        3. `store_last_clicked_node`: Stores the ID of the last clicked node.
+        3. `store_last_clicked_node`: Stores the ID of the last clicked node or searched node.
             - Outputs: Updates the "data" property of the "last-clicked-node" component.
-            - Inputs: Click events for each node in the dataset.
+            - Inputs: Click events for nodes and node search dropdown.
         4. `sync_slider_and_input`: Synchronizes the values of the time slider and its corresponding input field.
-            - Outputs: Updates the "value" properties of both the "time-slider" and 
+            - Outputs: Updates the "value" properties of both the "time-slider" and
               "time-slider-input" components.
             - Inputs: "time-slider" value and "time-slider-input" value.
-        5. `toggle_button_label`: Toggles the label of the "local-button" between 
+        5. `toggle_button_label`: Toggles the label of the "local-button" between
             "Local" and "Global" based on the number of clicks.
             - Outputs: Updates the "children" property of the "local-button" component.
             - Inputs: Click events on the "local-button".
@@ -384,14 +395,14 @@ class LEGO_GPT:
             - Outputs: Updates the "data" property of the "map-zoom" component.
             - Inputs: "zoom" property of the "network-map" component.
         7. `update_dynamic_plot`: Updates the dynamic plot based on various user inputs, including axis selections, clicked line or node, selected period, scope, and time range.
-            - Outputs: Updates the "children" property of the "dynamic-plot-container" 
+            - Outputs: Updates the "children" property of the "dynamic-plot-container"
               component.
-            - Inputs: "x-axis-dropdown" value, "y-axis-dropdown" value, 
-              "last-clicked-line" data, "last-clicked-node" data, 
-              "rep-period-dropdown" value, "local-button" children, and 
+            - Inputs: "x-axis-dropdown" value, "y-axis-dropdown" value,
+              "last-clicked-line" data, "last-clicked-node" data,
+              "rep-period-dropdown" value, "local-button" children, and
               "time-slider-range" value.
 
-        Each callback is designed to handle specific interactions and ensure the 
+        Each callback is designed to handle specific interactions and ensure the
         application responds dynamically to user inputs.
         """
 
@@ -429,14 +440,23 @@ class LEGO_GPT:
 
         @self.app.callback(
             Output("last-clicked-node", "data"),
-            Input("node-layer", "clickData"),
+            [Input("node-layer", "clickData"),
+             Input("node-search-dropdown", "value")],
         )
-        def store_last_clicked_node(click_data):
-            if not click_data:
+        def store_last_clicked_node(click_data, search_value):
+            if not ctx.triggered:
                 return dash.no_update
-            clicked_id = click_data["properties"]["id"]
-            print(f"Clicked node: {clicked_id}")
-            return clicked_id
+
+            triggered_id = ctx.triggered[0]['prop_id'].split('.')[0]
+
+            if triggered_id == "node-search-dropdown" and search_value:
+                return search_value
+            elif triggered_id == "node-layer" and click_data:
+                clicked_id = click_data["properties"]["id"]
+                print(f"Clicked node: {clicked_id}")
+                return clicked_id
+
+            return dash.no_update
 
         @self.app.callback(
             Output("time-slider", "value"),
@@ -471,6 +491,18 @@ class LEGO_GPT:
         )
         def store_map_zoom(zoom_level):
             return zoom_level
+
+        @self.app.callback(
+            Output("network-map", "viewport"),
+            Input("node-search-dropdown", "value"),
+            prevent_initial_call=True
+        )
+        def zoom_to_node(node_name):
+            if node_name and node_name in self.i.index:
+                lat = self.i.loc[node_name, 'lat']
+                lon = self.i.loc[node_name, 'lon']
+                return {'center': [lat, lon], 'zoom': 12}
+            return dash.no_update
 
         @self.app.callback(
             Output("dynamic-plot-container", "children"),
