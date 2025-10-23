@@ -224,13 +224,11 @@ class LEGO_GPT:
                                 min=1,
                                 max=len(self.k),
                                 step=1,
-                                marks=(
-                                    {
-                                        1: {'label': 'k0001'},
-                                        len(self.k) // 2: {'label': f"k{len(self.k) // 2:04d}"},
-                                        len(self.k): {'label': f"k{len(self.k):04d}"},
-                                    }  # if self.long_format else {k: {'label': str(k)} for k in self.k}
-                                ),
+                                marks={
+                                    1: {'label': self.k["values"].values[0]},
+                                    len(self.k) // 2: {'label': self.k["values"].values[len(self.k) // 2 - 1]},
+                                    len(self.k): {'label': self.k["values"].values[-1]},
+                                },
                                 tooltip={"placement": "top", "always_visible": True},
                                 value=1,
                             )
@@ -300,13 +298,11 @@ class LEGO_GPT:
                             min=1,
                             max=len(self.k),
                             step=1,
-                            marks=(
-                                {
-                                    1: {'label': 'k0001'},
-                                    len(self.k) // 2: {'label': f"k{len(self.k) // 2:04d}"},
-                                    len(self.k): {'label': f"k{len(self.k) :04d}"},
-                                }
-                            ),
+                            marks={
+                                1: {'label': self.k["values"].values[0]},
+                                len(self.k) // 2: {'label': self.k["values"].values[len(self.k) // 2 - 1]},
+                                len(self.k): {'label': self.k["values"].values[-1]},
+                            },
                             tooltip={"placement": "top", "always_visible": True},
                             # allowCross=False,
                             value=[1, 24],

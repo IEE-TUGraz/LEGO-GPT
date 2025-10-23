@@ -3,7 +3,7 @@ import pandas as pd
 
 def generate_plot(self: pd.DataFrame, x_axis: str, y_axis: str, scope: str, node_idx: int, line_idx: int, selected_period: str, time_range: list,):
    
-    k_range = [str(f"k{time:04d}") for time in range(time_range[0], time_range[1] + 1)] if self.long_format else self.k["values"].values.tolist()
+    k_range = self.k["values"].values[time_range[0]-1:time_range[1]].tolist() if self.long_format else self.k["values"].values.tolist()
     color_sequence = self.graph_options["colors"]
 
     if y_axis == "demand":
