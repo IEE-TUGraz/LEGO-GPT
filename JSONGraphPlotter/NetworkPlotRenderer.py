@@ -1,11 +1,12 @@
 import os
-import math
-import matplotlib.pyplot as plt
+
 import matplotlib.image as mpimg
+import matplotlib.pyplot as plt
+import networkx as nx
 from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 from shapely.geometry import box
 from shapely.ops import unary_union
-import networkx as nx
+
 
 class NetworkPlotRenderer:
     def __init__(self, config):
@@ -104,7 +105,8 @@ class NetworkPlotRenderer:
                     color="black", fontfamily="Consolas",
                     bbox=dict(facecolor="white", linewidth=0, alpha=0.0))
 
-    def _label_offset(self, angle):
+    @staticmethod
+    def _label_offset(angle):
         """
         Calculate the label offset and alignment based on the given angle.
         (SHOULD BE MOVED TO CONFIG)
@@ -113,7 +115,7 @@ class NetworkPlotRenderer:
         and vertical alignment for a label, based on the provided angle.
 
         Args:
-            angle (float or None): The angle in degrees. If None, a default offset 
+            angle (float or None): The angle in degrees. If None, a default offset
                 and alignment are returned.
 
         Returns:
@@ -215,7 +217,6 @@ class NetworkPlotRenderer:
 
         nodes = positions.copy()
         xs, ys = zip(*nodes.values())
-
 
         for new_node, info in outline_cfg.get("added_nodes", {}).items():
             base = info["base"]
