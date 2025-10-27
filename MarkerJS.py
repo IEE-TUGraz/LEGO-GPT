@@ -45,6 +45,7 @@ class MarkerJS:
 
         self.scale_factor = 1 / (np.sqrt(vGenP['values']).mean())
         self.min_radius = map_options["pie_chart_min_radius"]
+        self.max_radius = map_options["pie_chart_max_radius"]
 
     @staticmethod
     def pie_svg():
@@ -189,7 +190,8 @@ class MarkerJS:
         const labels = feature.properties.labels;
         const nodeName = feature.properties.name;
         const total = values.reduce((a, b) => a + b, 0);
-        const radius = {self.min_radius} + Math.sqrt(total) * {self.scale_factor:.6f};
+        const raw_radius = {self.min_radius} + Math.sqrt(total) * {self.scale_factor:.6f};
+        const radius = Math.min(raw_radius, {self.max_radius});
         const scale = radius * 2.5;
 
         const icon = L.divIcon({{
@@ -310,7 +312,8 @@ class MarkerJS:
             const orderedValues = orderedColors.map(color => colorSums[colorIndex[color]]);
             const orderedLabels = orderedColors.map(color => labelMap[color]);
             const total = orderedValues.reduce((a, b) => a + b, 0);
-            const radius = {self.min_radius} + Math.sqrt(total) * {self.scale_factor:.6f};
+            const raw_radius = {self.min_radius} + Math.sqrt(total) * {self.scale_factor:.6f};
+            const radius = Math.min(raw_radius, {self.max_radius});
             const scale = radius * 2.5;
 
             const icon = L.divIcon({{
