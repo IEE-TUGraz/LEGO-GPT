@@ -229,11 +229,19 @@ def generate_node_layer(buses: pd.DataFrame, gi: pd.DataFrame, vGenP_filtered: p
             if val > 0:
                 if tec not in technology_colors:
                     colors.append(technology_colors["unknown"])  # default color for unknown technology
-                    warnings.warn(f"Undefined technology: {tec}. Please check the technology_colors mapping in the config file. Setting color to grey.")
+                    warnings.warn(
+                        f"Undefined technology: {tec}. Please check the technology_colors mapping in the config file. Setting color to grey.")
+                    label_to_add = tec  # Keep original label if color unknown
                 else:
                     colors.append(technology_colors[tec])
-                values.append(round(val, 1))  # round values to 1 decimal place       
-                labels.append(tec)
+                    label_to_add = tec
+
+                storage_technologies = ["BESS"]  # Add other storage types if needed
+                if tec in storage_technologies:
+                    label_to_add = f"{tec} Discharge"  # Modify label for discharge
+
+                values.append(val)
+                labels.append(label_to_add)
                 total += val
 
         if pd.isna(row["lat"]) or pd.isna(row["lon"]):
