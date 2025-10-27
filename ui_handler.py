@@ -28,7 +28,7 @@ def generate_network_map(self, selected_period: str, selected_time: int, zoom_le
             - A node layer representing bus locations with pie charts for power generation.
 
     """
-    selected_time = self.k["values"].values[len(self.k) // 2 - 1]
+    selected_time = self.k["values"].iloc[selected_time - 1]
     # Use config values
     line_weight = self.map_options["line_weight"]
     arrow_scale = self.map_options["arrow_zoom_scale"]
