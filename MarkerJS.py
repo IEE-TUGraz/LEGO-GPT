@@ -1,6 +1,6 @@
-from dash_extensions.javascript import assign
-import pandas as pd
 import numpy as np
+import pandas as pd
+from dash_extensions.javascript import assign
 
 
 class MarkerJS:
@@ -170,93 +170,90 @@ class MarkerJS:
         - Configures the icon's size and anchor point based on the calculated radius.
         - Creates a Leaflet marker at the given latitude and longitude (`latlng`) 
           with the custom icon.
-        - Binds two tooltips: one permanent tooltip showing just the node name below 
-          the marker, and one hover tooltip with detailed information.
+        - Binds a permanent tooltip showing the node name and voltage.
+        - Binds a hover-activated popup with detailed information, including
+          voltage bounds and generation data.
 
         Note:
-            - The `pieSVG` function is expected to generate the SVG representation 
+            - The `pieSVG` function is expected to generate the SVG representation
               of the pie chart.
-            - The `self.min_radius` and `self.scale_factor` attributes are used to 
+            - The `self.min_radius` and `self.scale_factor` attributes are used to
               calculate the pie chart's radius.
             - The node name is permanently displayed below the pie chart icon using
               a permanent Leaflet tooltip.
         """
 
-        return assign(f"""function(feature, latlng) {{
-        {self.pie_svg()}
+        js_function = f"""function(feature, latlng) {{
+            {self.pie_svg()}
 
-        const values = feature.properties.values;
-        const colors = feature.properties.colors;
-        const labels = feature.properties.labels;
-        const nodeName = feature.properties.name;
-        const total = values.reduce((a, b) => a + b, 0);
-        const raw_radius = {self.min_radius} + Math.sqrt(total) * {self.scale_factor:.6f};
-        const radius = Math.min(raw_radius, {self.max_radius});
-        const scale = radius * 2.5;
+            // --- 1. Get all properties from the feature ---
+            const values = feature.properties.values;
+            const colors = feature.properties.colors;
+            const labels = feature.properties.labels;
+            const nodeName = feature.properties.name;
+            const voltage = feature.properties.voltage;
+            const voltageMin = feature.properties.voltage_min;
+            const voltageMax = feature.properties.voltage_max;
+            const total = values.reduce((a, b) => a + b, 0);
+            const raw_radius = {self.min_radius} + Math.sqrt(total) * {self.scale_factor:.6f};
+            const radius = Math.min(raw_radius, {self.max_radius});
+            const scale = radius * 2.5;
 
-        const icon = L.divIcon({{
-            html: pieSVG({{
-                values: values,
-                colors: colors,
-                width: scale,
-                height: scale,
-                radius: radius,
-                fontSize: 10
-            }}),
-            className: "custom-marker",
-            iconSize: L.point(scale, scale),
-            iconAnchor: [scale / 2, scale / 2]
-        }});
+            const icon = L.divIcon({{
+                html: pieSVG({{
+                    values: values,
+                    colors: colors,
+                    width: scale,
+                    height: scale,
+                    radius: radius,
+                    fontSize: 10
+                }}),
+                className: "custom-marker",
+                iconSize: L.point(scale, scale),
+                iconAnchor: [scale / 2, scale / 2]
+            }});
 
-        const marker = L.marker(latlng, {{ icon: icon }});
+            const marker = L.marker(latlng, {{ icon: icon }});
 
-        // Permanent tooltip showing node name below the marker
-        marker.bindTooltip(
-            `<div style="font-weight: bold; font-size: 11px; color: black; text-align: center;">${{nodeName}}</div>`,
-            {{
-                permanent: true,
-                direction: 'bottom',
-                offset: [0, scale / 2 + 5],
-                opacity: 0.9,
-                className: 'node-label-tooltip'
-            }}
-        );
-
-        // Hover tooltip with detailed information
-        marker.on('mouseover', function(e) {{
-            this.unbindTooltip();
-            this.bindTooltip(
-                `<b>${{nodeName}}</b><br/>` +
-                values.map((val, i) => {{
-                    const color = colors[i];
-                    const label = labels[i];
-                    return `<span style="color:${{color}}">&#9679;</span> ${{label}}: ${{val}}`;
-                }}).join("<br/>"),
-                {{
-                    permanent: false,
-                    direction: 'top',
-                    offset: [0, -scale / 2],
-                    opacity: 0.9
-                }}
-            ).openTooltip();
-        }});
-
-        marker.on('mouseout', function(e) {{
-            this.unbindTooltip();
-            this.bindTooltip(
-                `<div style="font-weight: bold; font-size: 11px; color: black; text-align: center;">${{nodeName}}</div>`,
+            // This is always visible and does not require hover.
+            marker.bindTooltip(
+                `<div style="font-weight: bold; font-size: 11px; color: black; text-align: center;">${{nodeName}}<br/>${{voltage}}</div>`,
                 {{
                     permanent: true,
                     direction: 'bottom',
-                    offset: [0, scale / 2 + 5],
+                    offset: [0, scale / 2 + 5], // Position below the icon
                     opacity: 0.9,
-                    className: 'node-label-tooltip'
+                    className: 'node-label-tooltip' // For custom CSS
                 }}
             );
-        }});
 
-        return marker;
-    }}""")
+            // This appears *only* on hover (or click).
+            var popupContent = `<b>${{nodeName}}</b> (${{voltage}})<br/>` +
+                                   `Min Voltage: ${{voltageMin}}<br/>` +
+                                   `Max Voltage: ${{voltageMax}}<br/>` +
+                                   `<hr style="margin: 3px 0;"/>` +
+                                   values.map((val, i) => {{
+                                       const color = colors[i];
+                                       const label = labels[i];
+                                       return `<span style="color:${{color}}">&#9679;</span> ${{label}}: ${{val}}`;
+                                   }}).join("<br/>");
+
+            marker.bindPopup(popupContent, {{
+                 offset: [0, -scale / 2] // Position above the icon
+            }});
+
+            marker.on('mouseover', function(e) {{
+                this.openPopup();
+            }});
+
+            marker.on('mouseout', function(e) {{
+                this.closePopup();
+            }});
+
+            return marker;
+        }}"""
+
+        return assign(js_function)
 
     def clusterToLayer(self):
         """
