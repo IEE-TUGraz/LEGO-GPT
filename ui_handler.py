@@ -13,7 +13,8 @@ import warnings
 from plot_definitions import generate_plot
 
 
-def generate_network_map(self, selected_period: str, selected_time: int, zoom_level: int, pq_mode: str = "vLineP") -> tuple:
+def generate_network_map(self, selected_period: str, selected_time: int, zoom_level: int,
+                         pq_mode: str = "vLineP") -> tuple:
     """
     Generates a network map visualization using power flow data and bus locations.
     
@@ -60,33 +61,31 @@ def generate_network_map(self, selected_period: str, selected_time: int, zoom_le
     positions = []
     for i, j, flow in zip(vLineP_filtered["i"].values, vLineP_filtered["j"].values, vLineP_filtered["values"].values):
         if flow < 0:
-            positions.append([(self.i.loc[j, 'lat'], self.i.loc[j, 'lon']), (self.i.loc[i, 'lat'], self.i.loc[i, 'lon']) ])
+            positions.append(
+                [(self.i.loc[j, 'lat'], self.i.loc[j, 'lon']), (self.i.loc[i, 'lat'], self.i.loc[i, 'lon'])])
         else:
-            positions.append([(self.i.loc[i, 'lat'], self.i.loc[i, 'lon']), (self.i.loc[j, 'lat'], self.i.loc[j, 'lon'])])
-
+            positions.append(
+                [(self.i.loc[i, 'lat'], self.i.loc[i, 'lon']), (self.i.loc[j, 'lat'], self.i.loc[j, 'lon'])])
 
     def get_arrow_size(zoom):
         if zoom is None:
             zoom = default_zoom
         return max(arrow_min, int(zoom * arrow_scale))
 
-
     arrow_size = get_arrow_size(zoom_level)
-
-
 
     # Prepare the full layer contents (lines + arrows)
     network_layer = []
     for idx, (i_pos, line_id, flow_val, rel_val) in enumerate(zip(
-        positions,
-        vLineP_filtered["line"].values,
-        vLineP_filtered["values"],
-        vLineP_filtered["rel_values"]
+            positions,
+            vLineP_filtered["line"].values,
+            vLineP_filtered["values"],
+            vLineP_filtered["rel_values"]
     )):
         # Get color from colormap
         color_rgb = plt.get_cmap('RdYlGn_r')(rel_val)[:3]
         color = "#{:02x}{:02x}{:02x}".format(
-            int(color_rgb[0]*255), int(color_rgb[1]*255), int(color_rgb[2]*255)
+            int(color_rgb[0] * 255), int(color_rgb[1] * 255), int(color_rgb[2] * 255)
         )
 
         # Polyline base for the arrowheads
@@ -94,7 +93,7 @@ def generate_network_map(self, selected_period: str, selected_time: int, zoom_le
             positions=i_pos,
             color="black",
             weight=line_weight,
-            opacity = 0,
+            opacity=0,
             id=f"line_base-{line_id}",
             n_clicks=0
         )
@@ -106,7 +105,8 @@ def generate_network_map(self, selected_period: str, selected_time: int, zoom_le
             weight=line_weight,
             id=f"{line_id}",
             children=[
-            dl.Popup(f"Power Flow: {abs(flow_val):.1f} MW, Line rating: {vLineP_filtered.iloc[idx]['pPmax']:.1f} MW")
+                dl.Popup(
+                    f"Power Flow: {abs(flow_val):.1f} MW, Line rating: {vLineP_filtered.iloc[idx]['pPmax']:.1f} MW")
             ],
             n_clicks=0
         )
@@ -130,7 +130,6 @@ def generate_network_map(self, selected_period: str, selected_time: int, zoom_le
         network_layer.extend([polyline_decorator, polyline_line])
         # make network layer as a dl.LayerGroup
 
-
     network_layer = dl.LayerGroup(children=network_layer, id="network-layer-" + str(uuid.uuid4()), n_clicks=0)
 
     node_layer = generate_node_layer(self.i, self.gi, vGenP_filtered, vSOCP_cii_filtered,
@@ -138,7 +137,9 @@ def generate_network_map(self, selected_period: str, selected_time: int, zoom_le
 
     return network_layer, node_layer
 
-def generate_dynamic_plot(self, x_axis: str, y_axis: str, line_idx: str, node_idx: str, selected_period: str, scope: str, time_range: list) -> html.Div:
+
+def generate_dynamic_plot(self, x_axis: str, y_axis: str, line_idx: str, node_idx: str, selected_period: str,
+                          scope: str, time_range: list) -> html.Div:
     """
     Generates a dynamic plot based on the provided parameters.
     Parameters:
@@ -160,8 +161,8 @@ def generate_dynamic_plot(self, x_axis: str, y_axis: str, line_idx: str, node_id
 
     """
 
-
-    print(f"Updating plot: x_axis={x_axis}, y_axis={y_axis}, selected_period={selected_period}, selected_time_range={time_range}, local_node={node_idx}, local_line={line_idx}, scope={scope}")
+    print(
+        f"Updating plot: x_axis={x_axis}, y_axis={y_axis}, selected_period={selected_period}, selected_time_range={time_range}, local_node={node_idx}, local_line={line_idx}, scope={scope}")
 
     fig = generate_plot(
         self,
@@ -177,13 +178,13 @@ def generate_dynamic_plot(self, x_axis: str, y_axis: str, line_idx: str, node_id
     if fig is None:
         fig = px.scatter(title="Select a valid combination for the plot")
 
-
     fig.update_layout(**self.graph_options["layout"])
 
-    return html.Div([dcc.Graph(figure=fig, id="dynamic-plot", style={'height': '100%', 'width': '100%'}, config=self.graph_options["graph_save_options"])],
+    return html.Div([dcc.Graph(figure=fig, id="dynamic-plot", style={'height': '100%', 'width': '100%'},
+                               config=self.graph_options["graph_save_options"])],
                     style={'flex': '1', 'min-width': '0', 'height': '90vh', 'margin-top': '0px'})
 
-def generate_node_layer(buses: pd.DataFrame, gi: pd.DataFrame, vGenP_filtered: pd.DataFrame, js_generator: object, technology_colors: dict, cluster_options: dict) -> dl.GeoJSON:
+
 def generate_node_layer(buses: pd.DataFrame, gi: pd.DataFrame, vGenP_filtered: pd.DataFrame,
                         vSOCP_cii_filtered: pd.DataFrame, js_generator: object, technology_colors: dict,
                         cluster_options: dict) -> dl.GeoJSON:
@@ -214,8 +215,9 @@ def generate_node_layer(buses: pd.DataFrame, gi: pd.DataFrame, vGenP_filtered: p
     pivoted = grouped.pivot(index="i", columns="tec", values="values").fillna(0)
     pivoted.reset_index(inplace=True)
     pivoted = pivoted.merge(buses, left_on="i", right_on="values", how="left")
+
     # check if any bus from set i is missing in column i
-    missing_buses =  set(buses.index) - set(pivoted["i"])
+    missing_buses = set(buses.index) - set(pivoted["i"])
     if missing_buses:
         # append the missing buses with their coordinates and 0 values
         new_rows = []
@@ -240,10 +242,6 @@ def generate_node_layer(buses: pd.DataFrame, gi: pd.DataFrame, vGenP_filtered: p
         pivoted = pivoted.merge(vSOCP_cii_filtered.rename(columns={"values": "voltage_level"}), on="i", how="left")
     else:
         pivoted["voltage_level"] = pd.NA  # Ensure column exists even if no data
-        for bus in missing_buses:
-            lat = buses.loc[buses.index == bus, "lat"].values[0]
-            lon = buses.loc[buses.index == bus, "lon"].values[0]
-            pivoted = pd.concat([pivoted, pd.DataFrame([{"i": bus, "lat": lat, "lon": lon}])], ignore_index=True)
 
     if "unknown" not in technology_colors.keys():
         # Add a default color for unknown technologies
@@ -289,7 +287,7 @@ def generate_node_layer(buses: pd.DataFrame, gi: pd.DataFrame, vGenP_filtered: p
 
         if pd.isna(row["lat"]) or pd.isna(row["lon"]):
             # print(f"Warning: Missing coordinates for bus {row['i']}.")
-            continue  #  invalid rows
+            continue  # invalid rows
         if total <= 0:
             # print(f"Warning: No generation data for bus {row['i']}.")
             # make a pie chart with 0 values
