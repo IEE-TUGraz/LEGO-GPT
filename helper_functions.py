@@ -125,6 +125,13 @@ def extract_excel_to_dataframe(input_dir: str, table: str) -> pd.DataFrame | tup
         # set index to i
         df.set_index("values", inplace=True)
 
+    elif table == "voltage_bounds":
+        filename = os.path.join(input_dir, "Power_BusInfo.xlsx")
+        start_row = 7
+        use_cols = "C,F,G"  # Columns C (bus name), F (max V), G (min V)
+        df = pd.read_excel(filename, skiprows=start_row, usecols=use_cols, header=None)
+        df.columns = ["values", "pBusMaxV", "pBusMinV"]
+        df.set_index("values", inplace=True)  # Set bus name as index
 
     elif table == "vLineP":
         filename = os.path.join(input_dir, "model.xlsx")
@@ -207,6 +214,20 @@ def extract_excel_to_dataframe(input_dir: str, table: str) -> pd.DataFrame | tup
         # Rename for consistency with other tables
         df = df.rename(columns={"vGenP": "values"})
         df = df[["rp", "k", "g", "values"]]
+
+    elif table == "vSOCP_cii":
+        filename = os.path.join(input_dir, "model.xlsx")
+        sheet_name = "vSOCP_cii"
+
+        # Load the data
+        df = pd.read_excel(filename, sheet_name=sheet_name)
+
+        # Standardize column names based on the provided format
+        df.columns = ["rp", "k", "i", "vSOCP_cii"]
+
+        # Rename for consistency with other tables
+        df = df.rename(columns={"vSOCP_cii": "values"})
+        df = df[["rp", "k", "i", "values"]]
 
     elif table == "pPmax":
         filename = os.path.join(input_dir, "Power_Network.xlsx")

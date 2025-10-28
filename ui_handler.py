@@ -40,12 +40,21 @@ def generate_network_map(self, selected_period: str, selected_time: int, zoom_le
     # Select data based on vLineP or vLineQ mode
     vLine_data = self.vLineP if pq_mode == "vLineP" else self.vLineQ if hasattr(self, "vLineQ") else self.vLineP
 
+    # Initialize vSOCP_cii_filtered as an empty DataFrame
+    vSOCP_cii_filtered = pd.DataFrame(columns=["i", "values"])
+
     if self.long_format:
         vLineP_filtered = vLine_data[vLine_data["k"] == selected_time]
         vGenP_filtered = self.vGenP[self.vGenP["k"] == selected_time]
+        if hasattr(self, "vSOCP_cii"):
+            vSOCP_cii_filtered = self.vSOCP_cii[self.vSOCP_cii["k"] == selected_time][["i", "values"]]
     else:
         vLineP_filtered = vLine_data[(vLine_data["rp"] == selected_period) & (vLine_data["k"] == selected_time)]
         vGenP_filtered = self.vGenP[(self.vGenP["rp"] == selected_period) & (self.vGenP["k"] == selected_time)]
+        if hasattr(self, "vSOCP_cii"):
+            vSOCP_cii_filtered = \
+                self.vSOCP_cii[(self.vSOCP_cii["rp"] == selected_period) & (self.vSOCP_cii["k"] == selected_time)][
+                    ["i", "values"]]
 
     # Generate positions and colors
     positions = []
@@ -124,7 +133,8 @@ def generate_network_map(self, selected_period: str, selected_time: int, zoom_le
 
     network_layer = dl.LayerGroup(children=network_layer, id="network-layer-" + str(uuid.uuid4()), n_clicks=0)
 
-    node_layer = generate_node_layer(self.i, self.gi, vGenP_filtered, self.js_generator, technology_colors, cluster_options)
+    node_layer = generate_node_layer(self.i, self.gi, vGenP_filtered, vSOCP_cii_filtered,
+                                     self.js_generator, technology_colors, cluster_options)
 
     return network_layer, node_layer
 
@@ -174,12 +184,16 @@ def generate_dynamic_plot(self, x_axis: str, y_axis: str, line_idx: str, node_id
                     style={'flex': '1', 'min-width': '0', 'height': '90vh', 'margin-top': '0px'})
 
 def generate_node_layer(buses: pd.DataFrame, gi: pd.DataFrame, vGenP_filtered: pd.DataFrame, js_generator: object, technology_colors: dict, cluster_options: dict) -> dl.GeoJSON:
+def generate_node_layer(buses: pd.DataFrame, gi: pd.DataFrame, vGenP_filtered: pd.DataFrame,
+                        vSOCP_cii_filtered: pd.DataFrame, js_generator: object, technology_colors: dict,
+                        cluster_options: dict) -> dl.GeoJSON:
     """
     Generates a GeoJSON layer for visualizing nodes with pie chart plots based on input data.
     Args:
         buses (pd.DataFrame): DataFrame containing bus information, including latitude and longitude.
         gi (pd.DataFrame): DataFrame containing generator information, including connected bus and technology type.
         vGenP_filtered (pd.DataFrame): Filtered DataFrame containing generation data to be visualized.
+        vSOCP_cii_filtered (pd.DataFrame): Filtered DataFrame containing voltage data for the selected time.
         js_generator (object): Object providing JavaScript functions for customizing point and cluster layers.
         technology_colors (dict): Dictionary mapping technology names to their corresponding colors.
     Returns:
@@ -204,6 +218,28 @@ def generate_node_layer(buses: pd.DataFrame, gi: pd.DataFrame, vGenP_filtered: p
     missing_buses =  set(buses.index) - set(pivoted["i"])
     if missing_buses:
         # append the missing buses with their coordinates and 0 values
+        new_rows = []
+        for bus in missing_buses:
+            lat = buses.loc[buses.index == bus, "lat"].values[0]
+            lon = buses.loc[buses.index == bus, "lon"].values[0]
+            # Create a full row with NA for new columns
+            new_row = {
+                "i": bus,
+                "lat": lat,
+                "lon": lon,
+                "pBusMaxV": buses.loc[bus, "pBusMaxV"] if "pBusMaxV" in buses.columns else pd.NA,
+                "pBusMinV": buses.loc[bus, "pBusMinV"] if "pBusMinV" in buses.columns else pd.NA
+            }
+            new_rows.append(new_row)
+
+        if new_rows:
+            pivoted = pd.concat([pivoted, pd.DataFrame(new_rows)], ignore_index=True)
+
+    # Merge the time-dependent voltage data
+    if not vSOCP_cii_filtered.empty:
+        pivoted = pivoted.merge(vSOCP_cii_filtered.rename(columns={"values": "voltage_level"}), on="i", how="left")
+    else:
+        pivoted["voltage_level"] = pd.NA  # Ensure column exists even if no data
         for bus in missing_buses:
             lat = buses.loc[buses.index == bus, "lat"].values[0]
             lon = buses.loc[buses.index == bus, "lon"].values[0]
@@ -218,13 +254,20 @@ def generate_node_layer(buses: pd.DataFrame, gi: pd.DataFrame, vGenP_filtered: p
 
     # Prepare GeoJSON input
     geo_data = []
+
+    # These columns are metadata, not generation data for the pie chart
+    skip_cols = [
+        "i", "lat", "lon", "values",  # 'values' is the index col from the 'buses' merge
+        "voltage_level", "pBusMaxV", "pBusMinV"  # The new voltage columns
+    ]
+
     for _, row in pivoted.iterrows():
         values = []
         colors = []
         labels = []
         total = 0
         for tec, val in row.items():
-            if tec == "i" or tec == "lat" or tec == "lon":
+            if tec in skip_cols or pd.isna(val):
                 continue  # skip the index and coordinates columns
             if val > 0:
                 if tec not in technology_colors:
@@ -262,6 +305,9 @@ def generate_node_layer(buses: pd.DataFrame, gi: pd.DataFrame, vGenP_filtered: p
             values=values,
             colors=colors,
             labels=labels,
+            voltage=f"{row.get('voltage_level', 0):.3f} p.u." if pd.notna(row.get('voltage_level')) else "N/A",
+            voltage_max=row.get("pBusMaxV", "N/A"),
+            voltage_min=row.get("pBusMinV", "N/A")
         ))
 
     geojson = dlx.dicts_to_geojson(geo_data)

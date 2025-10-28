@@ -219,6 +219,10 @@ def get_data(obj):
                 elif table == "vGenP":
                     self.vGenP.to_sql(table, conn, if_exists="replace", index=False)
                     self.vGenP["values"] = self.vGenP["values"].astype(float)
+                elif table == "vSOCP_cii":
+                    self.vSOCP_cii.to_sql(table, conn, if_exists="replace", index=False)
+                elif table == "voltage_bounds":
+                    self.voltage_bounds.to_sql(table, conn, if_exists="replace", index=False)
 
                 elif table == "pDemandP":
                     self.pDemandP.to_sql(table, conn, if_exists="replace", index=False)
@@ -479,6 +483,11 @@ def get_data(obj):
 
     # Add the coordinates in coords to the i dataframe
     self.i = pd.merge(self.i, self.coords, left_on="values", right_on="values", how="left")
+
+    # Add the voltage bounds to the i dataframe
+    if hasattr(self, "voltage_bounds"):
+        # self.voltage_bounds is already indexed by "values" from helper_functions
+        self.i = pd.merge(self.i, self.voltage_bounds, left_on="values", right_index=True, how="left")
 
     # Add to every line in vLineP the value divided by pPmax
     self.vLineP["rel_values"] = abs(self.vLineP["values"]) / self.vLineP["line"].map(

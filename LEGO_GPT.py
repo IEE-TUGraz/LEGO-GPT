@@ -87,6 +87,7 @@ class LEGO_GPT:
         """
 
         self.vGenP = None
+        self.vSOCP_cii = None
         self.bounds = None
         self.la = None
         self.k = None
