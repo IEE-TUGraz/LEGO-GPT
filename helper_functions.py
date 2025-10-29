@@ -6,6 +6,24 @@ import pandas as pd
 import yaml
 
 
+def add_canonical_line_ids(df: pd.DataFrame, i_col: str = "i", j_col: str = "j") -> pd.DataFrame:
+    """Adds a canonical line identifier column to a dataframe containing node pairs."""
+    import numpy as np
+
+    # Convert to string to ensure consistent comparison
+    i_str = df[i_col].astype(str)
+    j_str = df[j_col].astype(str)
+
+    # Vectorized comparison and concatenation
+    df["line_id"] = np.where(
+        i_str < j_str,
+        i_str + '_' + j_str,
+        j_str + '_' + i_str
+    )
+
+    return df
+
+
 def extract_table_to_dataframe(con: sqlite3.Connection, table_name: str) -> Optional[pd.DataFrame]:
     """
     Extracts the contents of a database table into a pandas DataFrame.
@@ -145,7 +163,10 @@ def extract_excel_to_dataframe(input_dir: str, table: str) -> pd.DataFrame | tup
 
         df = df.rename(columns={"vLineP": "values"})
 
-        # Generate unique line index (direction-insensitive)
+        # Add canonical line identifier for safe merging with pPmax
+        df = add_canonical_line_ids(df, "i", "j")
+
+        # Generate unique line index (direction-insensitive) - kept for backward compatibility
         line_index_dict = {}
         line_list = []
         line_indices = []
@@ -179,7 +200,10 @@ def extract_excel_to_dataframe(input_dir: str, table: str) -> pd.DataFrame | tup
 
         df = df.rename(columns={"vLineQ": "values"})
 
-        # Generate unique line index (direction-insensitive)
+        # Add canonical line identifier for safe merging with pPmax
+        df = add_canonical_line_ids(df, "i", "j")
+
+        # Generate unique line index (direction-insensitive) - kept for backward compatibility
         line_index_dict = {}
         line_list = []
         line_indices = []
@@ -237,6 +261,10 @@ def extract_excel_to_dataframe(input_dir: str, table: str) -> pd.DataFrame | tup
         df = pd.read_excel(filename, skiprows=start_row, usecols=use_cols, header=None)
         df.columns = ["i", "j", "values"]
 
+        # Add canonical line identifier for safe merging with vLineP/vLineQ
+        df = add_canonical_line_ids(df, "i", "j")
+
+        # Generate unique line index (direction-insensitive) - kept for backward compatibility
         line_index_dict = {}
         line_list = []
         line_indices = []
@@ -250,9 +278,10 @@ def extract_excel_to_dataframe(input_dir: str, table: str) -> pd.DataFrame | tup
 
         df["line"] = line_indices
 
+        # Average values for duplicate lines (same line with different directions)
         df = (
-            df.groupby("line", as_index=False)["values"]
-            .mean()
+            df.groupby("line_id", as_index=False)
+            .agg({"values": "mean", "line": "first"})
         )
 
     elif table == "pDemand":  # TODO

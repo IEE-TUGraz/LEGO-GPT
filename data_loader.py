@@ -490,20 +490,20 @@ def get_data(obj):
         self.i = pd.merge(self.i, self.voltage_bounds, left_on="values", right_index=True, how="left")
 
     # Add to every line in vLineP the value divided by pPmax
-    self.vLineP["rel_values"] = abs(self.vLineP["values"]) / self.vLineP["line"].map(
-        self.pPmax.set_index("line")["values"]
+    self.vLineP["rel_values"] = abs(self.vLineP["values"]) / self.vLineP["line_id"].map(
+        self.pPmax.set_index("line_id")["values"]
     )
-    self.vLineP["pPmax"] = self.vLineP["line"].map(
-        self.pPmax.set_index("line")["values"]
+    self.vLineP["pPmax"] = self.vLineP["line_id"].map(
+        self.pPmax.set_index("line_id")["values"]
     )
 
     # Add to every line in vLineQ the value divided by pPmax
     if hasattr(self, "vLineQ"):
-        self.vLineQ["rel_values"] = abs(self.vLineQ["values"]) / self.vLineQ["line"].map(
-            self.pPmax.set_index("line")["values"]
+        self.vLineQ["rel_values"] = abs(self.vLineQ["values"]) / self.vLineQ["line_id"].map(
+            self.pPmax.set_index("line_id")["values"]
         )
-        self.vLineQ["pPmax"] = self.vLineQ["line"].map(
-            self.pPmax.set_index("line")["values"]
+        self.vLineQ["pPmax"] = self.vLineQ["line_id"].map(
+            self.pPmax.set_index("line_id")["values"]
         )
 
     # Compute bounds for map display
