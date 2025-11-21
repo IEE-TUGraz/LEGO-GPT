@@ -411,25 +411,6 @@ def get_data(obj, ):
                 # add to the list
                 hydro_generators.append([g, i, tec])
 
-
-        # add hydro generators
-        hydro_generators = []
-
-        if hasattr(self, "Hydro_Buses"):
-            # rename the columns
-            self.Hydro_Buses.rename(columns={"0": "i"}, inplace=True)
-            # drop the index column
-            self.Hydro_Buses.drop(columns=["index"], inplace=True)
-            for row_idx, row in enumerate(self.Hydro_Buses.itertuples(index=True)):
-                # get the generator name
-                g = row.i + "_Hydro"
-                # get the bus name
-                i = row.i
-                # get tec
-                tec = "Hydro"
-                # add to the list
-                hydro_generators.append([g, i, tec])
-
         # add charging buses
         charging_buses = []
         if hasattr(self, "Charging_Buses"):
@@ -460,9 +441,9 @@ def get_data(obj, ):
         
         # add all the generation to the vGenP dataframe
         self.vGenP = pd.DataFrame(columns=["k", "g", "values"]).astype({
-                                                                "k": "str",  # or int, str, etc. — whatever matches your data
-                                                                "g": "str",
-                                                                "values": "float"})
+                                                        "k": "str",  # or int, str, etc. — whatever matches your data
+                                                        "g": "str",
+                                                        "values": "float"})
         pv_production = []
         if hasattr(self, "vProduction_PV") and not self.vProduction_PV.empty:
             for row_idx, row in enumerate(self.vProduction_PV.itertuples(index=True)):
