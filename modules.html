@@ -1,0 +1,403 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LEGO_GPT Package &mdash; LEGO_GPT February 2025 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=4d7a57c5"></script>
+      <script src="_static/doctools.js?v=9bcbadda"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="prev" title="Adding Data - Contribution Guide" href="adding_data.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            LEGO_GPT
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="introduction.html">Introduction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="data_description.html">Data Format Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="adding_data.html">Adding Data - Contribution Guide</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">LEGO_GPT Package</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#helper_functions.add_canonical_line_ids"><code class="docutils literal notranslate"><span class="pre">add_canonical_line_ids()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#helper_functions.copy_default_config"><code class="docutils literal notranslate"><span class="pre">copy_default_config()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#helper_functions.extract_excel_to_dataframe"><code class="docutils literal notranslate"><span class="pre">extract_excel_to_dataframe()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#helper_functions.extract_table_to_dataframe"><code class="docutils literal notranslate"><span class="pre">extract_table_to_dataframe()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#helper_functions.load_config"><code class="docutils literal notranslate"><span class="pre">load_config()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#plot_definitions.filter_dataframe"><code class="docutils literal notranslate"><span class="pre">filter_dataframe()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ui_handler.generate_dynamic_plot"><code class="docutils literal notranslate"><span class="pre">generate_dynamic_plot()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ui_handler.generate_network_map"><code class="docutils literal notranslate"><span class="pre">generate_network_map()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ui_handler.generate_node_layer"><code class="docutils literal notranslate"><span class="pre">generate_node_layer()</span></code></a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">LEGO_GPT</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">LEGO_GPT Package</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/modules.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-helper_functions">
+<span id="lego-gpt-package"></span><h1>LEGO_GPT Package<a class="headerlink" href="#module-helper_functions" title="Link to this heading"></a></h1>
+<dl class="py function">
+<dt class="sig sig-object py" id="helper_functions.add_canonical_line_ids">
+<span class="sig-prename descclassname"><span class="pre">helper_functions.</span></span><span class="sig-name descname"><span class="pre">add_canonical_line_ids</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">i_col</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'i'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">j_col</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'j'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">DataFrame</span></span></span><a class="headerlink" href="#helper_functions.add_canonical_line_ids" title="Link to this definition"></a></dt>
+<dd><p>Adds a canonical line identifier column to a dataframe containing node pairs.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="helper_functions.copy_default_config">
+<span class="sig-prename descclassname"><span class="pre">helper_functions.</span></span><span class="sig-name descname"><span class="pre">copy_default_config</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'config.yml'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">default_config_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'config_template.yml'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#helper_functions.copy_default_config" title="Link to this definition"></a></dt>
+<dd><p>Copies a default configuration file to a specified path if it does not already exist.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>config_path</strong> (<em>str</em>) – The path where the configuration file should be created.
+Defaults to “config.yml”.</p></li>
+<li><p><strong>default_config_path</strong> (<em>str</em>) – The path to the default configuration template file.
+Defaults to “config_template.yml”.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="simple">
+<dt>Behavior:</dt><dd><ul class="simple">
+<li><p>If the file at <cite>config_path</cite> does not exist, the function reads the content of
+<cite>default_config_path</cite> and writes it to <cite>config_path</cite>.</p></li>
+<li><p>If the file at <cite>config_path</cite> already exists, no action is taken, and a message
+is printed to indicate this.</p></li>
+</ul>
+</dd>
+<dt>Prints:</dt><dd><ul class="simple">
+<li><p>A message indicating that the default configuration has been copied, or that
+the configuration file already exists.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="helper_functions.extract_excel_to_dataframe">
+<span class="sig-prename descclassname"><span class="pre">helper_functions.</span></span><span class="sig-name descname"><span class="pre">extract_excel_to_dataframe</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">table</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">DataFrame</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">tuple</span></span></span><a class="headerlink" href="#helper_functions.extract_excel_to_dataframe" title="Link to this definition"></a></dt>
+<dd><p>Extract data from Excel files into a pandas DataFrame based on the specified table type.
+This function processes various Excel files and sheets, extracting and transforming data
+into pandas DataFrames according to the provided <cite>table</cite> parameter. The function supports
+multiple table types, each corresponding to a specific data extraction and transformation logic.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>input_dir</strong> (<em>str</em>) – The directory containing the input Excel files.</p></li>
+<li><p><strong>table</strong> (<em>str</em>) – <p>The type of table to extract. Supported values are:</p>
+<ul>
+<li><p>”i”: Extracts data from “Power_BusInfo.xlsx”.</p></li>
+<li><p>”rp”: Extracts unique values from “Power_WeightsRP.xlsx”.</p></li>
+<li><p>”k”: Extracts unique values from “Power_WeightsK.xlsx”.</p></li>
+<li><p>”gi”: Combines data from multiple Excel files (“Power_VRES”, “Power_ThermalGen”,
+“Power_Storage”, “Power_RoR”) into a DataFrame with columns “g” and “i”.</p></li>
+<li><p>”vLineP”: Processes line data from “model.xlsx” (sheet “vLineP”) and returns
+two DataFrames: one for the main data and one for line tuples.</p></li>
+<li><p>”coords”: Extracts coordinates (longitude and latitude) from “Power_BusInfo.xlsx”.</p></li>
+<li><p>”vGenP”: Processes generator data from “model.xlsx” into a long-format DataFrame.</p></li>
+<li><p>”pPmax”: Extracts power network data from “Power_Network.xlsx”.</p></li>
+<li><p>”pDemand”: Placeholder for future implementation.</p></li>
+</ul>
+</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><ul class="simple">
+<li><p>For most table types, returns a single DataFrame containing the extracted data.</p></li>
+<li><p>For “vLineP”, returns a tuple of two DataFrames: (main data, line tuples).</p></li>
+<li><p>For “gi”, returns a tuple of two DataFrames: (main data, unique “g” values).</p></li>
+<li><p>Returns None if the table type is invalid or not yet implemented.</p></li>
+</ul>
+</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>pandas.DataFrame or tuple</p>
+</dd>
+</dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<ul class="simple">
+<li><p>The function uses hardcoded file and sheet names for specific table types.</p></li>
+<li><p>Some table types include additional preprocessing steps, such as removing duplicates or resetting the index.</p></li>
+</ul>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>FileNotFoundError</strong> – If the specified Excel files or sheets are not found.</p></li>
+<li><p><strong>ValueError</strong> – If the table type is invalid or not supported.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="helper_functions.extract_table_to_dataframe">
+<span class="sig-prename descclassname"><span class="pre">helper_functions.</span></span><span class="sig-name descname"><span class="pre">extract_table_to_dataframe</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">con</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Connection</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">table_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">DataFrame</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#helper_functions.extract_table_to_dataframe" title="Link to this definition"></a></dt>
+<dd><p>Extracts the contents of a database table into a pandas DataFrame.
+:param con: The database connection object.
+:type con: sqlite3.Connection
+:param table_name: The name of the table to extract data from.
+:type table_name: str</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>A DataFrame containing the data from the specified table,
+or None if an error occurs.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>pandas.DataFrame</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>Exception</strong> – If there is an issue with the database query or connection,
+    an exception is caught and an error message is printed.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="helper_functions.load_config">
+<span class="sig-prename descclassname"><span class="pre">helper_functions.</span></span><span class="sig-name descname"><span class="pre">load_config</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'config.yml'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#helper_functions.load_config" title="Link to this definition"></a></dt>
+<dd><p>Loads a YAML configuration file and returns its contents as a dictionary.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>config_path</strong> (<em>str</em>) – The path to the YAML configuration file.
+Defaults to “config.yml”.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The contents of the YAML configuration file as a dictionary.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dict</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>FileNotFoundError</strong> – If the specified configuration file does not exist.</p></li>
+<li><p><strong>yaml.YAMLError</strong> – If there is an error parsing the YAML file.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function" id="module-plot_definitions">
+<dt class="sig sig-object py" id="plot_definitions.filter_dataframe">
+<span class="sig-prename descclassname"><span class="pre">plot_definitions.</span></span><span class="sig-name descname"><span class="pre">filter_dataframe</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">attr_str</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rp</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scope</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">local_node</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">local_line</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">k_range</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">[]</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">DataFrame</span></span></span><a class="headerlink" href="#plot_definitions.filter_dataframe" title="Link to this definition"></a></dt>
+<dd><p>Filters a DataFrame based on the provided attributes, scope, and conditions.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>attr_str</strong> (<em>str</em>) – The attribute string specifying which DataFrame to filter.
+Options include “vGenP”, “pDemandP”, and “vLineP”.</p></li>
+<li><p><strong>rp</strong> (<em>str</em>) – The representative period to filter by, applicable when <cite>long_format</cite> is False.</p></li>
+<li><p><strong>scope</strong> (<em>str</em>) – The scope of filtering. Options include “Local” and “Global”.
+- “Local”: Filters data specific to a local node or line.
+- “Global”: Aggregates data globally (only applicable for “pDemandP”).</p></li>
+<li><p><strong>local_node</strong> (<em>str</em><em>, </em><em>optional</em>) – The local node identifier for filtering when <cite>scope</cite> is “Local”.
+Defaults to None.</p></li>
+<li><p><strong>local_line</strong> (<em>str</em><em>, </em><em>optional</em>) – The local line identifier for filtering when <cite>scope</cite> is “Local”.
+Defaults to None.</p></li>
+<li><p><strong>k_range</strong> (<em>list</em><em>, </em><em>optional</em>) – A list of <cite>k</cite> values to filter the DataFrame by. Defaults to an empty list.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><dl class="simple">
+<dt>The filtered DataFrame based on the specified conditions.</dt><dd><p>Returns None if the specified DataFrame is not available.</p>
+</dd>
+</dl>
+</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>pd.DataFrame</p>
+</dd>
+</dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<ul class="simple">
+<li><p>The method operates on different DataFrames (<cite>vGenP</cite>, <cite>pDemandP</cite>, <cite>vLineP</cite>) based on <cite>attr_str</cite>.</p></li>
+<li><p>If <cite>long_format</cite> is False, the DataFrame is filtered by the representative period (<cite>rp</cite>).</p></li>
+<li><p>For “pDemandP” with “Global” scope, the data is aggregated by summing over <cite>k</cite> values.</p></li>
+<li><p>For “vGenP” with “Local” scope, filtering is based on the local node’s group (<cite>g</cite>).</p></li>
+<li><p>For “vLineP” with “Local” scope, filtering is based on the local line identifier.</p></li>
+</ul>
+</div>
+</dd></dl>
+
+<dl class="py function" id="module-ui_handler">
+<dt class="sig sig-object py" id="ui_handler.generate_dynamic_plot">
+<span class="sig-prename descclassname"><span class="pre">ui_handler.</span></span><span class="sig-name descname"><span class="pre">generate_dynamic_plot</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x_axis</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y_axis</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">line_idx</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">node_idx</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">selected_period</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scope</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time_range</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Div</span></span></span><a class="headerlink" href="#ui_handler.generate_dynamic_plot" title="Link to this definition"></a></dt>
+<dd><p>Generates a dynamic plot based on the provided parameters.
+:param x_axis: The variable to be used for the x-axis. Options include “time”, “generator”, or “line”.
+:type x_axis: str
+:param y_axis: The variable to be used for the y-axis. Options include “demand”, “dispatch”, or “power_flow”.
+:type y_axis: str
+:param line_idx: The str(index) of the line to be used for local power flow plots.
+:type line_idx: str
+:param node_idx: The index (str) of the node to be used for local dispatch or demand plots.
+:type node_idx: str
+:param selected_period: The selected period for filtering the data.
+:type selected_period: str
+:param scope: The scope of the plot, either “Global” or “Local”.
+:type scope: str
+:param time_range: A 2-element list specifying the range of time steps [start, end] for the plot.
+:type time_range: list</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>A Dash HTML Div containing the generated plot as a dcc.Graph component.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>html.Div</p>
+</dd>
+</dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<ul class="simple">
+<li><p>The function dynamically filters the data based on the provided parameters and generates a plot using Plotly.</p></li>
+<li><p>The plot type and configuration depend on the combination of x_axis and y_axis values.</p></li>
+<li><p>If the combination of x_axis and y_axis is invalid, a placeholder scatter plot is generated.</p></li>
+<li><p>The layout of the plot is customized with specific margins, background colors, and font sizes.</p></li>
+</ul>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="ui_handler.generate_network_map">
+<span class="sig-prename descclassname"><span class="pre">ui_handler.</span></span><span class="sig-name descname"><span class="pre">generate_network_map</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">selected_period</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">selected_time</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">zoom_level</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pq_mode</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'vLineP'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tuple</span></span></span><a class="headerlink" href="#ui_handler.generate_network_map" title="Link to this definition"></a></dt>
+<dd><p>Generates a network map visualization using power flow data and bus locations.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>selected_period</strong> (<em>str</em>) – The selected period identifier for filtering the data.</p></li>
+<li><p><strong>selected_time</strong> (<em>int</em>) – The selected time step identifier for filtering the data.</p></li>
+<li><p><strong>zoom_level</strong> (<em>int</em>) – The current zoom level of the map.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><dl class="simple">
+<dt>A tuple of Dash Leaflet components representing the network map, including:</dt><dd><ul class="simple">
+<li><p>A list of polylines representing power lines with arrows indicating power flow direction.</p></li>
+<li><p>A node layer representing bus locations with pie charts for power generation.</p></li>
+</ul>
+</dd>
+</dl>
+</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>tuple</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="ui_handler.generate_node_layer">
+<span class="sig-prename descclassname"><span class="pre">ui_handler.</span></span><span class="sig-name descname"><span class="pre">generate_node_layer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">buses</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gi</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">vGenP_filtered</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">vSOCP_cii_filtered</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">js_generator</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">object</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">technology_colors</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cluster_options</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">GeoJSON</span></span></span><a class="headerlink" href="#ui_handler.generate_node_layer" title="Link to this definition"></a></dt>
+<dd><p>Generates a GeoJSON layer for visualizing nodes with pie chart plots based on input data.
+:param buses: DataFrame containing bus information, including latitude and longitude.
+:type buses: pd.DataFrame
+:param gi: DataFrame containing generator information, including connected bus and technology type.
+:type gi: pd.DataFrame
+:param vGenP_filtered: Filtered DataFrame containing generation data to be visualized.
+:type vGenP_filtered: pd.DataFrame
+:param vSOCP_cii_filtered: Filtered DataFrame containing voltage data for the selected time.
+:type vSOCP_cii_filtered: pd.DataFrame
+:param js_generator: Object providing JavaScript functions for customizing point and cluster layers.
+:type js_generator: object
+:param technology_colors: Dictionary mapping technology names to their corresponding colors.
+:type technology_colors: dict</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>A Dash Leaflet GeoJSON layer with clustered nodes and pie chart visualizations.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>dl.GeoJSON</p>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<ul class="simple">
+<li><p>The function merges and processes the input data to prepare it for visualization.</p></li>
+<li><p>Rows with missing latitude, longitude, or zero total values are skipped.</p></li>
+<li><p>The resulting GeoJSON layer supports clustering and custom rendering of points and clusters.</p></li>
+<li><p>The size scaling is based on total generation values, with a minimum size defined by the user.</p></li>
+</ul>
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="adding_data.html" class="btn btn-neutral float-left" title="Adding Data - Contribution Guide" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Kelvin Walenta, Felix Auer.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

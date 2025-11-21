@@ -104,8 +104,11 @@ class LEGO_GPT:
         if self.input_type not in ["excel", "sqlite", "V2G"]:
             raise ValueError("Invalid input type. Please choose either 'excel', 'sqlite' or V2G.")
 
-        required_tables = ["i", "la", "vLineP", "pSmax_line", "k", "vGenP"]
-
+        required_tables = ["i", "la", "vLineP", "k", "vGenP"]
+        if hasattr(self, "pPmax"):
+            required_tables.append("pPmax")
+        elif hasattr(self, "pSmax_line"):
+            required_tables.append("pSmax_line")
         missing = [t for t in required_tables if t not in self.tables]
 
         if missing:

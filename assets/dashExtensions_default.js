@@ -68,11 +68,17 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
             }
 
 
+            // --- 1. Get all properties from the feature ---
             const values = feature.properties.values;
             const colors = feature.properties.colors;
             const labels = feature.properties.labels;
+            const nodeName = feature.properties.name;
+            const voltage = feature.properties.voltage;
+            const voltageMin = feature.properties.voltage_min;
+            const voltageMax = feature.properties.voltage_max;
             const total = values.reduce((a, b) => a + b, 0);
-            const radius = 8 + Math.sqrt(total) * 0.072047;
+            const raw_radius = 7 + Math.sqrt(total) * 68.172464;
+            const radius = Math.min(raw_radius, 8);
             const scale = radius * 2.5;
 
             const icon = L.divIcon({
@@ -92,18 +98,41 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
             const marker = L.marker(latlng, {
                 icon: icon
             });
+
+            // This is always visible and does not require hover.
             marker.bindTooltip(
-                `<b>${feature.properties.name}</b><br/>` +
+                `<div style="font-weight: bold; font-size: 11px; color: black; text-align: center;">${nodeName}<br/>${voltage}</div>`, {
+                    permanent: true,
+                    direction: 'bottom',
+                    offset: [0, scale / 2 + 5], // Position below the icon
+                    opacity: 0.9,
+                    className: 'node-label-tooltip' // For custom CSS
+                }
+            );
+
+            // This appears *only* on hover (or click).
+            var popupContent = `<b>${nodeName}</b> (${voltage})<br/>` +
+                `Min Voltage: ${voltageMin}<br/>` +
+                `Max Voltage: ${voltageMax}<br/>` +
+                `<hr style="margin: 3px 0;"/>` +
                 values.map((val, i) => {
                     const color = colors[i];
                     const label = labels[i];
                     return `<span style="color:${color}">&#9679;</span> ${label}: ${val}`;
-                }).join("<br/>"), {
-                    direction: 'top',
-                    offset: [0, -scale / 2],
-                    opacity: 0.9
-                }
-            );
+                }).join("<br/>");
+
+            marker.bindPopup(popupContent, {
+                offset: [0, -scale / 2] // Position above the icon
+            });
+
+            marker.on('mouseover', function(e) {
+                this.openPopup();
+            });
+
+            marker.on('mouseout', function(e) {
+                this.closePopup();
+            });
+
             return marker;
         },
         function1: function(feature, latlng, index, context) {
@@ -200,7 +229,8 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
             const orderedValues = orderedColors.map(color => colorSums[colorIndex[color]]);
             const orderedLabels = orderedColors.map(color => labelMap[color]);
             const total = orderedValues.reduce((a, b) => a + b, 0);
-            const radius = 8 + Math.sqrt(total) * 0.072047;
+            const raw_radius = 7 + Math.sqrt(total) * 68.172464;
+            const radius = Math.min(raw_radius, 8);
             const scale = radius * 2.5;
 
             const icon = L.divIcon({
@@ -220,16 +250,17 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
             const marker = L.marker(latlng, {
                 icon: icon
             });
+
+            // Compact hover tooltip with limited information
+            const tooltipContent = `<div style="font-size: 10px; padding: 2px 4px;"><b>Cluster (${leaves.length})</b></div>`;
+
             marker.bindTooltip(
-                `Cluster of ${leaves.length} Sites<br/>` +
-                orderedValues.map((val, i) => {
-                    const color = orderedColors[i];
-                    const label = orderedLabels[i];
-                    return `<span style="color:${color}">&#9679;</span> ${label}: ${val.toFixed(1)}`;
-                }).join("<br/>"), {
+                tooltipContent, {
+                    permanent: false,
                     direction: 'top',
-                    offset: [0, -scale / 2],
-                    opacity: 0.9
+                    offset: [0, -scale / 2 - 5],
+                    opacity: 0.75,
+                    className: 'compact-cluster-tooltip'
                 }
             );
 

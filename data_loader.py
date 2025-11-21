@@ -1,5 +1,6 @@
 import os
 import sqlite3
+import numpy as np
 import pandas as pd
 import helper_functions as h
 from InOutModule import ExcelReader
@@ -182,8 +183,11 @@ def get_data(obj, ):
             # add information about node attached to the storage unit
             self.vStIntraRes = self.vStIntraRes.merge(self.gi, left_on='storageUnits', right_on='g', how='inner').drop(columns=['g'])
 
-            # save all the modified tables to a sqlite database
-            # create a new database
+            # Add information about node attached to the storage unit
+            # self.vStIntraRes = self.vStIntraRes.merge(self.gi, left_on='storageUnits', right_on='g', how='inner').drop(
+            #     columns=['g'])
+
+            # Save all the modified tables to a sqlite database
             conn = sqlite3.connect(os.path.join(self.input_dir, "test_data.sqlite"))
             # save all the tables to the database
             for table in self.tables:
@@ -342,7 +346,6 @@ def get_data(obj, ):
         # reset index
         self.vLineP.reset_index(drop=True, inplace=True)    
 
-
         # iterate over pSmax_line and add drop duplicate lines
         for row_idx, row in enumerate(self.pSmax_line.itertuples(index=True)):  # Keep index for modification
             node_list = [row.i, row.j]
@@ -390,6 +393,24 @@ def get_data(obj, ):
                 tec = "Wind"
                 # add to the list
                 wind_generators.append([g, i, tec])
+
+        # add hydro generators
+        hydro_generators = []
+        if hasattr(self, "Hydro_Buses"):
+            # rename the columns
+            self.Hydro_Buses.rename(columns={"0": "i"}, inplace=True)
+            # drop the index column
+            self.Hydro_Buses.drop(columns=["index"], inplace=True)
+            for row_idx, row in enumerate(self.Hydro_Buses.itertuples(index=True)):
+                # get the generator name
+                g = row.i + "_Hydro"
+                # get the bus name
+                i = row.i
+                # get tec
+                tec = "Hydro"
+                # add to the list
+                hydro_generators.append([g, i, tec])
+
 
         # add hydro generators
         hydro_generators = []
@@ -522,22 +543,25 @@ def get_data(obj, ):
     for row_idx, row in enumerate(self.pSmax_line.itertuples(index=True)):  # Keep index for modification
         node_set = {row.i, row.j}  # Use set for order-independent comparison
 
-        # Iterate over self.la DataFrame to find the matching line
-        for idx, line in enumerate(self.la.itertuples(index=False)):
-            if {line.i, line.j} == node_set:
-                # Update the corresponding row in vLineP
-                self.pSmax_line.at[row_idx, "line"] = str(int(idx))
-                break  # Stop searching once a match is found
+    # Add to every line in vLineP the value divided by pPmax
+    if hasattr(self, "pPmax"):
+        self.vLineP["rel_values"] = abs(self.vLineP["values"]) / self.vLineP["line_id"].map(
+            self.pPmax.set_index("line_id")["values"]
+        )
+    else:
+        self.vLineP["rel_values"] = abs(self.vLineP["values"]) / self.vLineP["line_id"].map(
+            self.pSmax_line.set_index("line_id")["values"]
+        )
 
+    # Add to every line in vLineQ the value divided by pPmax
+    if hasattr(self, "vLineQ"):
+        self.vLineQ["rel_values"] = abs(self.vLineQ["values"]) / self.vLineQ["line_id"].map(
+            self.pPmax.set_index("line_id")["values"]
+        )
+        self.vLineQ["pPmax"] = self.vLineQ["line_id"].map(
+            self.pPmax.set_index("line_id")["values"]
+        )
 
-    # add to every line in vLineP the value divided by pSmax_line in MVA
-    self.vLineP["rel_values"] = abs(self.vLineP["values"]) / self.vLineP["line"].map(
-        self.pSmax_line.set_index("line")["values"]/ 1000
-    )
-    self.vLineP["pSmax_line"] = self.vLineP["line"].map(
-        self.pSmax_line.set_index("line")["values"]/ 1000
-    )
- 
     # Compute bounds for map display
     self.bounds = [
         [min(self.i['lat']), min(self.i['lon'])],
