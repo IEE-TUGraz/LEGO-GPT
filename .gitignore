@@ -44,3 +44,5 @@ testing.py
 config.yml
 /docs/build
 
+
+_static/
