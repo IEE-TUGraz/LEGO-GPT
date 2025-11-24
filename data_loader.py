@@ -155,94 +155,41 @@ def get_data(obj):
 
     # Load LEGO data from Excel files
     elif self.input_type == "excel":
-        fast = False  # TODO: are we going to use the database?
-        if not fast:
-            for table in self.tables:
-                print(f"Loading table {table}...")
-                if table == "vLineP":
-                    df, df_lines = h.extract_excel_to_dataframe(self.input_dir, table)
-                    self.vLineP = df
-                    self.la = df_lines
-                elif table == "vLineQ":
-                    df, df_lines = h.extract_excel_to_dataframe(self.input_dir, table)
-                    self.vLineQ = df
-                elif table == "gi":
-                    df, df_g = h.extract_excel_to_dataframe(self.input_dir, table)
-                    self.gi = df
-                    self.g = df_g
-                elif table == "la" or table == "g":  # get from other dataframe
-                    continue
-                else:
-                    # Load the data as variable with the table name
-                    setattr(self, table, h.extract_excel_to_dataframe(self.input_dir, table))
-            self.coords = h.extract_excel_to_dataframe(self.input_dir, "coords")
-
-            # Only take values where duplicate is False for vLineQ
-            if hasattr(self, "vLineQ"):
-                self.vLineQ = self.vLineQ[self.vLineQ["duplicate"] == False].copy()
-                self.vLineQ.drop(columns=["duplicate"], inplace=True)
-
-            # Only take values where duplicate is False
-            self.vLineP = self.vLineP[self.vLineP["duplicate"] == False].copy()
-            self.vLineP.drop(columns=["duplicate"], inplace=True)
-
-            if not hasattr(self, "gi"):
-                raise ValueError("vStIntraRes table requires gi table to be loaded first.")
-
-            # Add information about node attached to the storage unit
-            self.vStIntraRes = self.vStIntraRes.merge(self.gi, left_on='storageUnits', right_on='g', how='inner').drop(
-                columns=['g'])
-
-            # Save all the modified tables to a sqlite database
-            conn = sqlite3.connect(os.path.join(self.input_dir, "test_data.sqlite"))
-
-            # Save all the tables to the database
-            for table in self.tables:
-                if table == "vLineP":
-                    self.vLineP.to_sql(table, conn, if_exists="replace", index=False)
-                elif table == "la":
-                    self.la.to_sql(table, conn, if_exists="replace", index=False)
-                elif table == "i":
-                    self.i.to_sql(table, conn, if_exists="replace", index=False)
-                elif table == "pPmax":
-                    pass
-                elif table == "k":
-                    self.k.to_sql(table, conn, if_exists="replace", index=False)
-                elif table == "g":
-                    self.g.to_sql(table, conn, if_exists="replace", index=False)
-                elif table == "gi":
-                    self.gi.to_sql(table, conn, if_exists="replace", index=False)
-                elif table == "rp":
-                    self.rp.to_sql(table, conn, if_exists="replace", index=False)
-                elif table == "coords":
-                    self.coords.to_sql(table, conn, if_exists="replace", index=False)
-                elif table == "vGenP":
-                    self.vGenP.to_sql(table, conn, if_exists="replace", index=False)
-                    self.vGenP["values"] = self.vGenP["values"].astype(float)
-                elif table == "vSOCP_cii":
-                    self.vSOCP_cii.to_sql(table, conn, if_exists="replace", index=False)
-                elif table == "voltage_bounds":
-                    self.voltage_bounds.to_sql(table, conn, if_exists="replace", index=False)
-
-                elif table == "pDemandP":
-                    self.pDemandP.to_sql(table, conn, if_exists="replace", index=False)
-                # elif table == "vStIntraRes":
-                #     self.vStIntraRes.to_sql(table, conn, if_exists="replace", index=False)
-                # elif table == "vStInterRes":
-                #     self.vStInterRes.to_sql(table, conn, if_exists="replace", index=False)
-
-            self.coords.to_sql("coords", conn, if_exists="replace", index=False)
-
-        else:
-            # Load from the database
-            conn = sqlite3.connect(os.path.join(self.input_dir, "test_data.sqlite"))
-            for table in self.tables:
+        for table in self.tables:
+            print(f"Loading table {table}...")
+            if table == "vLineP":
+                df, df_lines = h.extract_excel_to_dataframe(self.input_dir, table)
+                self.vLineP = df
+                self.la = df_lines
+            elif table == "vLineQ":
+                df, df_lines = h.extract_excel_to_dataframe(self.input_dir, table)
+                self.vLineQ = df
+            elif table == "gi":
+                df, df_g = h.extract_excel_to_dataframe(self.input_dir, table)
+                self.gi = df
+                self.g = df_g
+            elif table == "la" or table == "g":  # get from other dataframe
+                continue
+            else:
                 # Load the data as variable with the table name
-                setattr(self, table, h.extract_table_to_dataframe(conn, table))
-            self.coords = h.extract_excel_to_dataframe(self.input_dir, "coords")
+                setattr(self, table, h.extract_excel_to_dataframe(self.input_dir, table))
+        self.coords = h.extract_excel_to_dataframe(self.input_dir, "coords")
 
-            # Set value column of vGenP to float type
-            self.vGenP["values"] = self.vGenP["values"].astype(float)
+        # Only take values where duplicate is False for vLineQ
+        if hasattr(self, "vLineQ"):
+            self.vLineQ = self.vLineQ[self.vLineQ["duplicate"] == False].copy()
+            self.vLineQ.drop(columns=["duplicate"], inplace=True)
+
+        # Only take values where duplicate is False
+        self.vLineP = self.vLineP[self.vLineP["duplicate"] == False].copy()
+        self.vLineP.drop(columns=["duplicate"], inplace=True)
+
+        if not hasattr(self, "gi"):
+            raise ValueError("vStIntraRes table requires gi table to be loaded first.")
+
+        # Add information about node attached to the storage unit
+        self.vStIntraRes = self.vStIntraRes.merge(self.gi, left_on='storageUnits', right_on='g', how='inner').drop(
+            columns=['g'])
 
     elif self.input_type == "V2G":
 
