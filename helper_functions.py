@@ -1,20 +1,51 @@
+"""
+Helper Functions Module for LEGO-GPT
+
+This module provides utility functions for configuration loading, data extraction,
+and common operations used throughout the application.
+"""
+
 import os
-import sqlite3
-from typing import Optional
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Optional, Union
 
+import numpy as np
 import pandas as pd
-import yaml
 
 
-def add_canonical_line_ids(df: pd.DataFrame, i_col: str = "i", j_col: str = "j") -> pd.DataFrame:
-    """Adds a canonical line identifier column to a dataframe containing node pairs."""
-    import numpy as np
+# =============================================================================
+# Line ID Utilities
+# =============================================================================
 
-    # Convert to string to ensure consistent comparison
+def add_canonical_line_ids(
+        df: pd.DataFrame,
+        i_col: str = "i",
+        j_col: str = "j"
+) -> pd.DataFrame:
+    """
+    Add a canonical line identifier column to a dataframe containing node pairs.
+
+    The canonical ID is direction-independent, always using alphabetical ordering
+    of node names to create a consistent identifier regardless of flow direction.
+
+    Args:
+        df: DataFrame containing node pair columns.
+        i_col: Name of the 'from' node column.
+        j_col: Name of the 'to' node column.
+
+    Returns:
+        DataFrame with added 'line_id' column.
+
+    Example:
+        >>> df = pd.DataFrame({'i': ['A', 'B'], 'j': ['B', 'A']})
+        >>> df = add_canonical_line_ids(df)
+        >>> df['line_id'].tolist()
+        ['A_B', 'A_B']
+    """
     i_str = df[i_col].astype(str)
     j_str = df[j_col].astype(str)
 
-    # Vectorized comparison and concatenation
     df["line_id"] = np.where(
         i_str < j_str,
         i_str + '_' + j_str,
@@ -24,343 +55,483 @@ def add_canonical_line_ids(df: pd.DataFrame, i_col: str = "i", j_col: str = "j")
     return df
 
 
-def extract_table_to_dataframe(con: sqlite3.Connection, table_name: str) -> Optional[pd.DataFrame]:
+def build_line_index(df: pd.DataFrame) -> tuple[dict, list]:
     """
-    Extracts the contents of a database table into a pandas DataFrame.
+    Build a mapping from node pairs to unique line indices.
+
     Args:
-        con (sqlite3.Connection): 
-            The database connection object.
-        table_name (str): 
-            The name of the table to extract data from.
+        df: DataFrame with 'i' and 'j' columns.
+
     Returns:
-        pandas.DataFrame: 
-            A DataFrame containing the data from the specified table, 
-            or None if an error occurs.
-    Raises:
-        Exception: 
-            If there is an issue with the database query or connection, 
-            an exception is caught and an error message is printed.
+        Tuple of (line_index_dict, line_list) where:
+            - line_index_dict maps frozenset(i, j) to index
+            - line_list contains [i, j] pairs in order
     """
-    try:
-        # Query the table
-        query = f"SELECT * FROM {table_name};"
-        df = pd.read_sql(query, con)
+    line_index_dict = {}
+    line_list = []
+
+    for _, row in df.iterrows():
+        key = frozenset([str(row["i"]), str(row["j"])])
+        if key not in line_index_dict:
+            line_index_dict[key] = len(line_list)
+            line_list.append([str(row["i"]), str(row["j"])])
+
+    return line_index_dict, line_list
+
+
+def assign_line_indices(
+        df: pd.DataFrame,
+        line_index_dict: dict,
+        line_list: list
+) -> pd.DataFrame:
+    """
+    Assign line indices and detect duplicates in a DataFrame.
+
+    Args:
+        df: DataFrame with 'i' and 'j' columns.
+        line_index_dict: Mapping from node pairs to indices.
+        line_list: List of [i, j] pairs.
+
+    Returns:
+        DataFrame with 'line' and 'duplicate' columns added.
+    """
+    line_indices = []
+    duplicates = []
+
+    for _, row in df.iterrows():
+        key = frozenset([str(row["i"]), str(row["j"])])
+        idx = line_index_dict.get(key, -1)
+        line_indices.append(idx)
+
+        # Check if this is a reverse direction (duplicate)
+        if idx >= 0 and idx < len(line_list):
+            original = line_list[idx]
+            is_dup = [str(row["i"]), str(row["j"])] != original
+        else:
+            is_dup = False
+        duplicates.append(is_dup)
+
+    df["line"] = line_indices
+    df["duplicate"] = duplicates
+    df["line"] = df["line"].astype(str)
+
+    return df
+
+
+# =============================================================================
+# Configuration Utilities
+# =============================================================================
+
+def copy_default_config(
+        config_path: str = "config.yml",
+        default_config_path: str = "config_template.yml"
+) -> None:
+    """
+    Copy default configuration template to specified path if it doesn't exist.
+
+    Args:
+        config_path: Destination path for configuration file.
+        default_config_path: Source path for template file.
+    """
+    if os.path.exists(config_path):
+        print(f"Configuration file already exists at {config_path}")
+        return
+
+    if not os.path.exists(default_config_path):
+        raise FileNotFoundError(f"Configuration file not found: {default_config_path}")
+
+    with open(default_config_path, 'r') as f:
+        config_content = f.read()
+
+    with open(config_path, 'w') as f:
+        f.write(config_content)
+
+    print(f"Copied default configuration to {config_path}")
+    print("Please edit the configuration file with your settings, then run again.")
+
+
+# =============================================================================
+# Excel Data Extraction Configuration
+# =============================================================================
+
+@dataclass
+class ExcelColumnConfig:
+    """Configuration for Excel column extraction."""
+    filename: str
+    sheet_name: Optional[str] = None
+    skiprows: int = 7
+    usecols: str = "C"
+    column_names: Optional[list[str]] = None
+    header: Optional[int] = None
+
+
+# Default Excel configurations for each table type
+EXCEL_CONFIGS: dict[str, ExcelColumnConfig] = {
+    "i": ExcelColumnConfig(
+        filename="Power_BusInfo.xlsx",
+        usecols="C",
+        column_names=["values"]
+    ),
+    "rp": ExcelColumnConfig(
+        filename="Power_WeightsRP.xlsx",
+        usecols="C",
+        column_names=["values"]
+    ),
+    "k": ExcelColumnConfig(
+        filename="Power_WeightsK.xlsx",
+        usecols="C",
+        column_names=["values"]
+    ),
+    "coords": ExcelColumnConfig(
+        filename="Power_BusInfo.xlsx",
+        usecols="C,M,N",
+        column_names=["values", "lat", "lon"]
+    ),
+    "voltage_bounds": ExcelColumnConfig(
+        filename="Power_BusInfo.xlsx",
+        usecols="C,F,G",
+        column_names=["values", "pBusMaxV", "pBusMinV"]
+    ),
+    "pPmax": ExcelColumnConfig(
+        filename="Power_Network.xlsx",
+        usecols="C,D,K",
+        column_names=["i", "j", "values"]
+    ),
+}
+
+
+# =============================================================================
+# Excel Data Extraction
+# =============================================================================
+
+class ExcelExtractor:
+    """Handles extraction of data from Excel files."""
+
+    def __init__(self, input_dir: str):
+        """
+        Initialize the Excel extractor.
+
+        Args:
+            input_dir: Directory containing input Excel files.
+        """
+        self.input_dir = Path(input_dir)
+
+    def _get_filepath(self, filename: str) -> Path:
+        """Get full path for a filename."""
+        return self.input_dir / filename
+
+    def _file_exists(self, filename: str) -> bool:
+        """Check if a file exists."""
+        return self._get_filepath(filename).exists()
+
+    def _read_excel(
+            self,
+            config: ExcelColumnConfig,
+            **kwargs
+    ) -> Optional[pd.DataFrame]:
+        """
+        Read an Excel file with the given configuration.
+
+        Args:
+            config: Excel column configuration.
+            **kwargs: Additional arguments to pass to pd.read_excel.
+
+        Returns:
+            DataFrame or None if file doesn't exist.
+        """
+        filepath = self._get_filepath(config.filename)
+
+        if not filepath.exists():
+            print(f"Warning: File not found: {filepath}")
+            return None
+
+        try:
+            df = pd.read_excel(
+                filepath,
+                sheet_name=config.sheet_name or 0,
+                skiprows=config.skiprows,
+                usecols=config.usecols,
+                header=config.header,
+                **kwargs
+            )
+
+            if config.column_names:
+                df.columns = config.column_names
+
+            return df
+
+        except Exception as e:
+            print(f"Error reading {filepath}: {e}")
+            return None
+
+    def extract_set(self, table: str) -> Optional[pd.DataFrame]:
+        """
+        Extract a set table (i, rp, k).
+
+        Args:
+            table: Table name.
+
+        Returns:
+            DataFrame with 'values' column.
+        """
+        config = EXCEL_CONFIGS.get(table)
+        if config is None:
+            print(f"No configuration for table: {table}")
+            return None
+
+        df = self._read_excel(config)
+        if df is not None:
+            df = df.drop_duplicates()
 
         return df
 
-    except Exception as e:
-        print(f"Error extracting table {table_name}: {e}")
-        return None
+    def extract_bus_info(self) -> Optional[pd.DataFrame]:
+        """Extract bus information (nodes)."""
+        return self.extract_set("i")
+
+    def extract_rep_periods(self) -> Optional[pd.DataFrame]:
+        """Extract representative periods."""
+        return self.extract_set("rp")
+
+    def extract_time_steps(self) -> Optional[pd.DataFrame]:
+        """Extract time steps."""
+        return self.extract_set("k")
+
+    def extract_coordinates(self) -> Optional[pd.DataFrame]:
+        """Extract node coordinates."""
+        config = EXCEL_CONFIGS["coords"]
+        df = self._read_excel(config)
+
+        if df is not None:
+            df = df.drop_duplicates(subset=["values"])
+            df = df.set_index("values")
+
+        return df
+
+    def extract_voltage_bounds(self) -> Optional[pd.DataFrame]:
+        """Extract voltage bounds."""
+        config = EXCEL_CONFIGS["voltage_bounds"]
+        df = self._read_excel(config)
+
+        if df is not None:
+            df = df.drop_duplicates(subset=["values"])
+            df = df.set_index("values")
+
+        return df
+
+    def extract_generator_info(self) -> tuple[Optional[pd.DataFrame], Optional[pd.DataFrame]]:
+        """
+        Extract generator-node mapping with technology.
+
+        Returns:
+            Tuple of (gi DataFrame, g DataFrame).
+        """
+        filenames = ["Power_VRES.xlsx", "Power_Storage.xlsx"]
+        all_data = []
+
+        for filename in filenames:
+            filepath = self._get_filepath(filename)
+            if not filepath.exists():
+                continue
+
+            try:
+                df = pd.read_excel(
+                    filepath,
+                    skiprows=7,
+                    usecols="C,D,E",
+                    header=None
+                )
+                df.columns = ["g", "tec", "i"]
+                all_data.append(df)
+            except Exception as e:
+                print(f"Error reading {filepath}: {e}")
+
+        if not all_data:
+            return None, None
+
+        gi = pd.concat(all_data, ignore_index=True)
+        gi = gi.drop_duplicates()
+
+        g = gi[["g"]].drop_duplicates().reset_index(drop=True)
+        g.columns = ["values"]
+
+        return gi, g
+
+    def extract_line_flow(
+            self,
+            variable: str = "vLineP"
+    ) -> tuple[Optional[pd.DataFrame], Optional[pd.DataFrame]]:
+        """
+        Extract line power flow data.
+
+        Args:
+            variable: Variable name ("vLineP" or "vLineQ").
+
+        Returns:
+            Tuple of (flow DataFrame, lines DataFrame).
+        """
+        filepath = self._get_filepath("model.xlsx")
+        if not filepath.exists():
+            print(f"Warning: File not found: {filepath}")
+            return None, None
+
+        try:
+            df = pd.read_excel(filepath, sheet_name=variable)
+        except Exception as e:
+            print(f"Error reading {variable} from {filepath}: {e}")
+            return None, None
+
+        # Standardize column names
+        df.columns = ["rp", "k", "i", "j", "c", variable]
+        df = df.rename(columns={variable: "values"})
+
+        # Ensure string types for node columns
+        df["i"] = df["i"].astype(str)
+        df["j"] = df["j"].astype(str)
+
+        # Add canonical line identifier
+        df = add_canonical_line_ids(df, "i", "j")
+
+        # Build line index and assign
+        line_index_dict, line_list = build_line_index(df)
+        df = assign_line_indices(df, line_index_dict, line_list)
+
+        # Create lines DataFrame
+        df_lines = pd.DataFrame(line_list, columns=["i", "j"])
+
+        return df, df_lines
+
+    def extract_gen_power(self) -> Optional[pd.DataFrame]:
+        """Extract generator power variable."""
+        filepath = self._get_filepath("model.xlsx")
+        if not filepath.exists():
+            return None
+
+        try:
+            df = pd.read_excel(filepath, sheet_name="vGenP")
+            df.columns = ["rp", "k", "g", "vGenP"]
+            df = df.rename(columns={"vGenP": "values"})
+            return df[["rp", "k", "g", "values"]]
+        except Exception as e:
+            print(f"Error reading vGenP: {e}")
+            return None
+
+    def extract_voltage_socp(self) -> Optional[pd.DataFrame]:
+        """Extract SOCP voltage values."""
+        filepath = self._get_filepath("model.xlsx")
+        if not filepath.exists():
+            return None
+
+        try:
+            df = pd.read_excel(filepath, sheet_name="vSOCP_cii")
+            df.columns = ["rp", "k", "i", "vSOCP_cii"]
+            df = df.rename(columns={"vSOCP_cii": "values"})
+            return df[["rp", "k", "i", "values"]]
+        except Exception as e:
+            print(f"Error reading vSOCP_cii: {e}")
+            return None
+
+    def extract_line_capacity(self) -> Optional[pd.DataFrame]:
+        """Extract line capacity parameter."""
+        config = EXCEL_CONFIGS["pPmax"]
+        df = self._read_excel(config)
+
+        if df is None:
+            return None
+
+        # Ensure string types
+        df["i"] = df["i"].astype(str)
+        df["j"] = df["j"].astype(str)
+
+        # Add canonical line identifier
+        df = add_canonical_line_ids(df, "i", "j")
+
+        # Build line index
+        line_index_dict, line_list = build_line_index(df)
+        df = assign_line_indices(df, line_index_dict, line_list)
+
+        # Average values for same line (different circuits)
+        df = df.groupby("line_id", as_index=False).agg({
+            "values": "mean",
+            "line": "first"
+        })
+
+        return df
+
+    def extract_storage_soc(self) -> Optional[pd.DataFrame]:
+        """Extract storage state of charge."""
+        filepath = self._get_filepath("model.xlsx")
+        if not filepath.exists():
+            return None
+
+        try:
+            df = pd.read_excel(filepath, sheet_name="vStIntraRes")
+            df.columns = ["rp", "k", "storageUnits", "vStIntraRes"]
+            df = df.rename(columns={"vStIntraRes": "values"})
+            return df[["rp", "k", "storageUnits", "values"]]
+        except Exception as e:
+            print(f"Error reading vStIntraRes: {e}")
+            return None
 
 
-def extract_excel_to_dataframe(input_dir: str, table: str) -> pd.DataFrame | tuple:
+# =============================================================================
+# Legacy API (Backward Compatibility)
+# =============================================================================
+
+def extract_excel_to_dataframe(
+        input_dir: str,
+        table: str
+) -> Union[pd.DataFrame, tuple, None]:
     """
-    Extract data from Excel files into a pandas DataFrame based on the specified table type.
-    This function processes various Excel files and sheets, extracting and transforming data
-    into pandas DataFrames according to the provided `table` parameter. The function supports
-    multiple table types, each corresponding to a specific data extraction and transformation logic.
+    Extract data from Excel files into a pandas DataFrame.
 
-    Parameters:
+    This function provides backward compatibility with the original API.
 
-        input_dir (str): The directory containing the input Excel files.
-        table (str): The type of table to extract. Supported values are:
-
-            - "i": Extracts data from "Power_BusInfo.xlsx".
-            - "rp": Extracts unique values from "Power_WeightsRP.xlsx".
-            - "k": Extracts unique values from "Power_WeightsK.xlsx".
-            - "gi": Combines data from multiple Excel files ("Power_VRES", "Power_ThermalGen",
-              "Power_Storage", "Power_RoR") into a DataFrame with columns "g" and "i".
-            - "vLineP": Processes line data from "model.xlsx" (sheet "vLineP") and returns
-              two DataFrames: one for the main data and one for line tuples.
-            - "coords": Extracts coordinates (longitude and latitude) from "Power_BusInfo.xlsx".
-            - "vGenP": Processes generator data from "model.xlsx" into a long-format DataFrame.
-            - "pPmax": Extracts power network data from "Power_Network.xlsx".
-            - "pDemand": Placeholder for future implementation.
+    Args:
+        input_dir: Directory containing input Excel files.
+        table: Type of table to extract.
 
     Returns:
-
-        pandas.DataFrame or tuple:
-            - For most table types, returns a single DataFrame containing the extracted data.
-            - For "vLineP", returns a tuple of two DataFrames: (main data, line tuples).
-            - For "gi", returns a tuple of two DataFrames: (main data, unique "g" values).
-            - Returns None if the table type is invalid or not yet implemented.
-    Note:
-
-        - The function uses hardcoded file and sheet names for specific table types.
-        - Some table types include additional preprocessing steps, such as removing duplicates or resetting the index.
-
-    Raises:
-        FileNotFoundError: If the specified Excel files or sheets are not found.
-        ValueError: If the table type is invalid or not supported.
+        DataFrame or tuple of DataFrames depending on table type.
     """
-
-    df, df_lines, df_g = None, None, None
+    extractor = ExcelExtractor(input_dir)
 
     if table == "i":
-        filename = os.path.join(input_dir, "Power_BusInfo.xlsx")
-        skiprows = 7
-        use_cols = "C"
-        df = pd.read_excel(filename, skiprows=skiprows, usecols=use_cols, header=None)
-        df.columns = ["values"]
-        df = df.drop_duplicates()
+        return extractor.extract_bus_info()
 
     elif table == "rp":
-        filename = os.path.join(input_dir, "Power_WeightsRP.xlsx")
-        skiprows = 7
-        use_cols = "C"
-        df = pd.read_excel(filename, skiprows=skiprows, usecols=use_cols, header=None)
-        df.columns = ["values"]
-        df = df.drop_duplicates()
+        return extractor.extract_rep_periods()
 
     elif table == "k":
-        filename = os.path.join(input_dir, "Power_WeightsK.xlsx")
-        skiprows = 7
-        use_cols = "C"
-        df = pd.read_excel(filename, skiprows=skiprows, usecols=use_cols, header=None)
-        df.columns = ["values"]
-        df = df.drop_duplicates()
+        return extractor.extract_time_steps()
 
     elif table == "gi":
-        filenames = [os.path.join(input_dir, tech + ".xlsx") for tech in
-                     ["Power_VRES", "Power_ThermalGen", "Power_Storage"]]  # TODO: Power_ROR?
-        skiprows = 7
-        use_cols = "C,D,E"
-        df = pd.DataFrame(columns=["g", "tec", "i"])
-        for filename in filenames:
-            temp_df = pd.read_excel(filename, skiprows=skiprows, usecols=use_cols, header=None)
-            temp_df.columns = ["g", "tec", "i"]
-            df = pd.concat([df, temp_df], ignore_index=True)
-        # reset index
-        df.reset_index(drop=True, inplace=True)
-        df_g = df[["g"]].drop_duplicates().reset_index(drop=True)
+        return extractor.extract_generator_info()
 
     elif table == "coords":
-        filename = os.path.join(input_dir, "Power_BusInfo.xlsx")
-        start_row = 7
-        use_cols = "C,M,N"
-        df = pd.read_excel(filename, skiprows=start_row, usecols=use_cols, header=None)
-        df.columns = ["values", "lat", "lon"]
-        # set index to i
-        df.set_index("values", inplace=True)
+        return extractor.extract_coordinates()
 
     elif table == "voltage_bounds":
-        filename = os.path.join(input_dir, "Power_BusInfo.xlsx")
-        start_row = 7
-        use_cols = "C,F,G"  # Columns C (bus name), F (max V), G (min V)
-        df = pd.read_excel(filename, skiprows=start_row, usecols=use_cols, header=None)
-        df.columns = ["values", "pBusMaxV", "pBusMinV"]
-        df.set_index("values", inplace=True)  # Set bus name as index
+        return extractor.extract_voltage_bounds()
 
     elif table == "vLineP":
-        filename = os.path.join(input_dir, "model.xlsx")
-        sheet_name = "vLineP"
-
-        # Load the data
-        df = pd.read_excel(filename, sheet_name=sheet_name)
-
-        # Standardize column names
-        df.columns = ["rp", "k", "i", "j", "c", "vLineP"]
-
-        df = df.rename(columns={"vLineP": "values"})
-
-        # Add canonical line identifier for safe merging with pPmax
-        df = add_canonical_line_ids(df, "i", "j")
-
-        # Generate unique line index (direction-insensitive) - kept for backward compatibility
-        line_index_dict = {}
-        line_list = []
-        line_indices = []
-        for idx, row in df.iterrows():
-            ij_key = frozenset([row["i"], row["j"]])
-            if ij_key not in line_index_dict:
-                line_index_dict[ij_key] = len(line_index_dict)
-                line_list.append([row["i"], row["j"]])
-            line_indices.append(line_index_dict[ij_key])
-
-        df["line"] = line_indices
-
-        # Detect duplicates (direction differences)
-        df["duplicate"] = [
-            [row.i, row.j] != line_list[df.loc[idx, "line"]]
-            for idx, row in df.iterrows()
-        ]
-
-        # Rename for consistency with other tables
-        df_lines = pd.DataFrame(line_list, columns=["i", "j"])
+        return extractor.extract_line_flow("vLineP")
 
     elif table == "vLineQ":
-        filename = os.path.join(input_dir, "model.xlsx")
-        sheet_name = "vLineQ"
-
-        # Load the data
-        df = pd.read_excel(filename, sheet_name=sheet_name)
-
-        # Standardize column names
-        df.columns = ["rp", "k", "i", "j", "c", "vLineQ"]
-
-        df = df.rename(columns={"vLineQ": "values"})
-
-        # Add canonical line identifier for safe merging with pPmax
-        df = add_canonical_line_ids(df, "i", "j")
-
-        # Generate unique line index (direction-insensitive) - kept for backward compatibility
-        line_index_dict = {}
-        line_list = []
-        line_indices = []
-        for idx, row in df.iterrows():
-            ij_key = frozenset([row["i"], row["j"]])
-            if ij_key not in line_index_dict:
-                line_index_dict[ij_key] = len(line_index_dict)
-                line_list.append([row["i"], row["j"]])
-            line_indices.append(line_index_dict[ij_key])
-
-        df["line"] = line_indices
-
-        # Detect duplicates (direction differences)
-        df["duplicate"] = [
-            [row.i, row.j] != line_list[df.loc[idx, "line"]]
-            for idx, row in df.iterrows()
-        ]
-
-        # Rename for consistency with other tables
-        df_lines = pd.DataFrame(line_list, columns=["i", "j"])
+        return extractor.extract_line_flow("vLineQ")
 
     elif table == "vGenP":
-        filename = os.path.join(input_dir, "model.xlsx")
-        sheet_name = "vGenP"
-
-        # Load the data
-        df = pd.read_excel(filename, sheet_name=sheet_name)
-
-        # Standardize column names
-        df.columns = ["rp", "k", "g", "vGenP"]
-
-        # Rename for consistency with other tables
-        df = df.rename(columns={"vGenP": "values"})
-        df = df[["rp", "k", "g", "values"]]
+        return extractor.extract_gen_power()
 
     elif table == "vSOCP_cii":
-        filename = os.path.join(input_dir, "model.xlsx")
-        sheet_name = "vSOCP_cii"
-
-        # Load the data
-        df = pd.read_excel(filename, sheet_name=sheet_name)
-
-        # Standardize column names based on the provided format
-        df.columns = ["rp", "k", "i", "vSOCP_cii"]
-
-        # Rename for consistency with other tables
-        df = df.rename(columns={"vSOCP_cii": "values"})
-        df = df[["rp", "k", "i", "values"]]
+        return extractor.extract_voltage_socp()
 
     elif table == "pPmax":
-        filename = os.path.join(input_dir, "Power_Network.xlsx")
-
-        start_row = 7
-        use_cols = "C,D,K"
-        df = pd.read_excel(filename, skiprows=start_row, usecols=use_cols, header=None)
-        df.columns = ["i", "j", "values"]
-
-        # Add canonical line identifier for safe merging with vLineP/vLineQ
-        df = add_canonical_line_ids(df, "i", "j")
-
-        # Generate unique line index (direction-insensitive) - kept for backward compatibility
-        line_index_dict = {}
-        line_list = []
-        line_indices = []
-
-        for _, row in df.iterrows():
-            ij_key = frozenset([row["i"], row["j"]])
-            if ij_key not in line_index_dict:
-                line_index_dict[ij_key] = len(line_index_dict)
-                line_list.append([row["i"], row["j"]])
-            line_indices.append(line_index_dict[ij_key])
-
-        df["line"] = line_indices
-
-        # Average values for duplicate lines (same line with different directions)
-        df = (
-            df.groupby("line_id", as_index=False)
-            .agg({"values": "mean", "line": "first"})
-        )
-
-    elif table == "pDemand":  # TODO
-        pass
+        return extractor.extract_line_capacity()
 
     elif table == "vStIntraRes":
-        filename = os.path.join(input_dir, "model.xlsx")
-        sheet_name = "vStIntraRes"
-
-        # Load the data
-        df = pd.read_excel(filename, sheet_name=sheet_name)
-
-        # Standardize column names
-        df.columns = ["rp", "k", "storageUnits", "vStIntraRes"]
-
-        # Rename for consistency with other tables
-        df = df.rename(columns={"vStIntraRes": "values"})
-
-        # Reorder columns to match old structure
-        df = df[["rp", "k", "storageUnits", "values"]]
+        return extractor.extract_storage_soc()
 
     else:
-        print(f"Table {table} not yet implemented or invalid.")
-        df = None
-
-    if table == "vLineP" or table == "vLineQ":
-        return df, df_lines
-    elif table == "gi":
-        return df, df_g
-    else:
-        return df
-
-
-def copy_default_config(config_path: str = "config.yml", default_config_path: str = "config_template.yml") -> None:
-    """
-    Copies a default configuration file to a specified path if it does not already exist.
-
-    Args:
-        config_path (str): The path where the configuration file should be created.
-            Defaults to "config.yml".
-        default_config_path (str): The path to the default configuration template file.
-            Defaults to "config_template.yml".
-
-    Behavior:
-        - If the file at `config_path` does not exist, the function reads the content of
-          `default_config_path` and writes it to `config_path`.
-        - If the file at `config_path` already exists, no action is taken, and a message
-          is printed to indicate this.
-
-    Prints:
-        - A message indicating that the default configuration has been copied, or that
-          the configuration file already exists.
-    """
-    if not os.path.exists(config_path):
-        with open(default_config_path, 'r') as f:
-            config = f.read()
-        with open(config_path, 'w') as f:
-            f.write(config)
-        print(f"Copied default configuration to {config_path}. Enter path settings in the file, then rerun.")
-
-    else:
-        print(f"Configuration file already exists at {config_path}.")
-
-
-def load_config(config_path: str = "config.yml") -> dict:
-    """
-    Loads a YAML configuration file and returns its contents as a dictionary.
-
-    Args:
-        config_path (str): The path to the YAML configuration file. 
-                           Defaults to "config.yml".
-
-    Returns:
-        dict: The contents of the YAML configuration file as a dictionary.
-
-    Raises:
-        FileNotFoundError: If the specified configuration file does not exist.
-        yaml.YAMLError: If there is an error parsing the YAML file.
-    """
-    with open(config_path, 'r') as f:
-        config = yaml.safe_load(f)
-    return config
+        print(f"Table '{table}' not implemented or invalid.")
+        return None
