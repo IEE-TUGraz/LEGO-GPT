@@ -1,21 +1,22 @@
-input_type: excel # excel or sqlite
-input_dir: PATH TO LEGO RESULTS
+input_type: sqlite  # sqlite or excel
+input_dir: PATH_TO_LEGO_RESULTS
 
+# Tables to load (names must match SQLite table names or Excel processing logic)
 tables:
-  - rp
-  - k
-  - i
-  - g
-  - gi
-  - la
-  - vLineP
-  - vGenP
-  - pPmax
-  - vStIntraRes
-  - thermalGenerators # only for LEGO pyomo needed
-  - rorGenerators # only for LEGO pyomo needed
-  - vresGenerators # only for LEGO pyomo needed
-  - storageUnits # only for LEGO pyomo needed
+  - rp                # Representative periods
+  - k                 # Time steps
+  - i                 # Nodes/buses
+  - g                 # Generators
+  - gi                # Generator-node mapping (technology inferred from name)
+  - la                # Lines/branches
+  - vLineP            # Active power flow
+  - vLineQ            # Reactive power flow (optional)
+  - vGenP             # Generator active power
+  - vSOCP_cii         # Voltage (SOCP formulation)
+  - pPmax             # Line thermal limits
+  - vStIntraRes       # Storage state of charge
+  - coords            # Node coordinates (dummy created if not present)
+  - voltage_bounds    # Voltage bounds per node
 
 dropdown_options_y:
   - label: "Y: Dispatch"
@@ -56,6 +57,7 @@ map_options:
     HPS: "#2e86c1"
     RoR: "#21618c"
     BESS: "#7f8c8d"
+    "BESS Discharge": "#bdc3c7"
     V2G_charging: "#8e44ad"
     V2G_discharging: "#9b59b6"
     unknown: "#808080"
@@ -63,7 +65,8 @@ map_options:
     vres: "#2ecc71"
     thermal: "#c0392b"
     storage: "#7f8c8d"
-  
+    Hydro: "#2878ad"
+
   cluster_options:
     cluster_radius: 60
     maxZoom: 16
@@ -80,13 +83,13 @@ graph_options:
 
   layout:
     xaxis:
-      domain: [0, 0.85]
+      domain: [ 0, 0.85 ]
       title:
         font:
           size: 18
           color: black
     yaxis:
-      domain: [0, 1]
+      domain: [ 0, 1 ]
       title:
         font:
           size: 18
@@ -108,27 +111,24 @@ graph_options:
     title:
       x: 0.5
   colors:
-  - "#2E86AB"
-  - "#F6C85F"
-  - "#6F4E7C"
-  - "#9FD356"
-  - "#CA3E47"
-  - "#FFA600"
-  - "#50514F"
-  - "#8E44AD"
-  - "#00B894"
-  - "#E17055"
-  - "#D63031"
-  - "#00A8FF"
-  - "#FAB1A0"
-  - "#6C5CE7"
-  - "#E84393"
-  - "#55EFC4"
-  - "#A29BFE"
-  - "#FD79A8"
-  - "#81ECEC"
-  - "#0984E3"
-
-   
-
-    
+    - "#2E86AB"
+    - "#F6C85F"
+    - "#6F4E7C"
+    - "#9FD356"
+    - "#CA3E47"
+    - "#FFA600"
+    - "#50514F"
+    - "#8E44AD"
+    - "#00B894"
+    - "#E17055"
+    - "#D63031"
+    - "#00A8FF"
+    - "#FAB1A0"
+    - "#6C5CE7"
+    - "#E84393"
+    - "#55EFC4"
+    - "#A29BFE"
+    - "#FD79A8"
+    - "#81ECEC"
+    - "#0984E3"
+    - "#2878ad"
