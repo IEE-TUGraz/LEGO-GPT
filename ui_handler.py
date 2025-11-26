@@ -13,7 +13,7 @@ import dash_leaflet.express as dlx
 import matplotlib.pyplot as plt
 import pandas as pd
 import plotly.express as px
-from dash import dcc, html
+import plotly.graph_objects as go
 
 from plot_definitions import generate_plot
 
@@ -22,7 +22,6 @@ from plot_definitions import generate_plot
 # =============================================================================
 
 MapLayerResult = tuple[dl.LayerGroup, dl.GeoJSON]
-PlotResult = html.Div
 
 
 # =============================================================================
@@ -246,7 +245,7 @@ class NetworkMapGenerator:
             pivoted["voltage_level"] = pd.NA
 
         # Prepare GeoJSON data
-        geo_data = self._prepare_geo_data(pivoted, buses)
+        geo_data = self._prepare_geo_data(pivoted)
 
         geojson = dlx.dicts_to_geojson(geo_data)
         geobuf = dlx.geojson_to_geobuf(geojson)
@@ -265,11 +264,10 @@ class NetworkMapGenerator:
             clusterToLayer=self._data.js_generator.clusterToLayer(),
         )
 
+    @staticmethod
     def _add_missing_buses(
-            self,
             pivoted: pd.DataFrame,
-            buses: pd.DataFrame
-    ) -> pd.DataFrame:
+            buses: pd.DataFrame) -> pd.DataFrame:
         """Add missing buses to the pivoted DataFrame."""
         missing_buses = set(buses.index) - set(pivoted["i"])
 
@@ -291,9 +289,7 @@ class NetworkMapGenerator:
 
     def _prepare_geo_data(
             self,
-            pivoted: pd.DataFrame,
-            buses: pd.DataFrame
-    ) -> list[dict]:
+            pivoted: pd.DataFrame) -> list[dict]:
         """Prepare GeoJSON data from pivoted DataFrame."""
         # Ensure default colors
         tech_colors = self._technology_colors.copy()
@@ -375,7 +371,7 @@ class DynamicPlotGenerator:
             selected_period: str,
             scope: str,
             time_range: list[int]
-    ) -> PlotResult:
+    ) -> go.Figure:
         """
         Generate a dynamic plot.
 
@@ -389,7 +385,7 @@ class DynamicPlotGenerator:
             time_range: Time range [start, end].
 
         Returns:
-            HTML Div containing the plot.
+            Plotly Figure object.
         """
         print(
             f"Generating plot: x={x_axis}, y={y_axis}, period={selected_period}, "
@@ -415,22 +411,7 @@ class DynamicPlotGenerator:
         # Apply layout options
         fig.update_layout(**self._graph_options.get("layout", {}))
 
-        return html.Div(
-            children=[
-                dcc.Graph(
-                    figure=fig,
-                    id="dynamic-plot",
-                    style={'height': '100%', 'width': '100%'},
-                    config=self._graph_options.get("graph_save_options", {})
-                )
-            ],
-            style={
-                'flex': '1',
-                'minWidth': '0',
-                'height': '90vh',
-                'marginTop': '0px'
-            }
-        )
+        return fig
 
 
 # =============================================================================
@@ -472,7 +453,7 @@ def generate_dynamic_plot(
         selected_period: str,
         scope: str,
         time_range: list[int]
-) -> PlotResult:
+) -> go.Figure:
     """
     Generate a dynamic plot.
 
@@ -489,7 +470,7 @@ def generate_dynamic_plot(
         time_range: Time range [start, end].
 
     Returns:
-        HTML Div containing the plot.
+        Plotly Figure object.
     """
     generator = DynamicPlotGenerator(self)
     return generator.generate(
