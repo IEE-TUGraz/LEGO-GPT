@@ -1,543 +1,185 @@
+"""
+LEGO-GPT: Graph Plotting Tool for LEGO
+
+This module provides the main application class for visualizing and analyzing
+network data from LEGO optimization results. It creates an interactive web
+application with maps and dynamic plots.
+
+Architecture:
+    LEGO_GPT (orchestrator)
+    ├── AppConfig (configuration with validation)
+    ├── DataProvider (data access interface)
+    ├── LayoutBuilder (UI component construction)
+    ├── CallbackManager (reactive behavior)
+    └── MarkerJS (map marker generation)
+
+Usage:
+    # From command line
+    python LEGO_GPT.py [config_path]
+
+    # From Python
+    from LEGO_GPT import LEGO_GPT
+    app = LEGO_GPT(config_path="config.yml")
+    app.run()
+"""
+
 import os
 import sys
+from typing import Optional
 
 import dash
-import dash_leaflet as dl
-import numpy as np
-from dash import dcc, html, Input, Output, ctx
 
 import helper_functions as h
 from MarkerJS import MarkerJS
+from callback_manager import CallbackManager
+from config import load_config
 from data_loader import get_data
+from data_provider import DataProvider
+from layout_builder import LayoutBuilder
 from ui_handler import generate_network_map, generate_dynamic_plot
 
 
 class LEGO_GPT:
     """
-    This class is designed to create an interactive Dash web application for visualizing and analyzing network data 
-    from LEGO results files. It provides a user-friendly interface with dropdowns, sliders, and interactive maps 
-    to explore the data.
+    Main application class for LEGO-GPT visualization tool.
+
+    This class orchestrates the various components of the application:
+    - Configuration loading and validation
+    - Data loading and preprocessing
+    - UI layout construction
+    - Callback registration for interactivity
+
+    The class follows a composition pattern, delegating specific responsibilities
+    to specialized components while maintaining overall application control.
 
     Attributes:
-    -----------
+        config: Application configuration object.
+        data_provider: Interface for data access.
+        app: Dash application instance.
+        js_generator: Marker generator for map visualization.
 
-        input_dir (str): 
-            Directory containing input data files.
-        input_type (str): 
-            Type of input data ('excel', 'sqlite', or 'V2G').
-        tables (list): 
-            List containing tables to be loaded from the input data.
-        dropdown_options_y (list):
-            Options for the Y-axis dropdown.
-        dropdown_options_x (list): 
-            Options for the X-axis dropdown.
-        map_options (dict): 
-            Configuration options for the map.
-        app (dash.Dash): 
-            Dash application instance.
-        long_format (bool): 
-            Flag indicating whether the data is in long format.
-        bounds (list): 
-            Map bounds for visualization.
-
-    Methods:
-    -------- 
-        __init__(config_path: str = None):
-            Initializes the LegoGPT class by loading configuration, validating input, and setting up the app.
-        load_data():
-            Loads network data from the LEGO results file.
-        create_app():
-            Initializes the Dash application.
-        setup_layout():
-            Defines the layout of the Dash application, including controls, map, and graph sections.
-        setup_callbacks():
-            Defines the callbacks for interactivity in the Dash application, such as updating the map, syncing sliders, 
-            and generating dynamic plots.
-        run():
-            Starts the Dash server to host the application.
+    Example:
+        >>> app = LEGO_GPT(config_path="my_config.yml")
+        >>> app.run(debug=True, port=8050)
     """
 
-    def __init__(self, config_path: str = None):
+    def __init__(self, config_path: Optional[str] = None):
         """
-        Initialize the class.
-
-        This method sets up the class by loading the configuration, validating input types,
-        checking for required tables, and initializing the application components.
+        Initialize the LEGO-GPT application.
 
         Args:
-            config_path (str, optional): Path to the configuration file. If not provided,
-                                         the default "config.yml" in the current directory is used.
+            config_path: Path to configuration file. If None, uses "config.yml"
+                        in the current directory.
 
         Raises:
-            ValueError: If the input type is not one of "excel", "sqlite", or "V2G".
-            ValueError: If any of the required tables ("i", "la", "vLineP", "pPmax", "k") 
-                        are missing from the configuration.
-
-        Attributes:
-            input_dir (str): Directory for input files as specified in the configuration.
-            input_type (str): Type of input data ("excel", "sqlite", or "V2G").
-            tables (dict): Dictionary of tables loaded from the configuration.
-            dropdown_options_y (list): Dropdown options for the Y-axis.
-            dropdown_options_x (list): Dropdown options for the X-axis.
-            map_options (dict): Mapping options from the configuration.
-            app (dash.Dash): Dash application instance.
-            long_format (bool): Flag indicating if the data is in long format.
-            js_generator (MarkerJS): Instance of MarkerJS for generating pie charts.
-            bounds (list): Bounds for the map visualization.
+            FileNotFoundError: If configuration file doesn't exist.
+            ValueError: If configuration is invalid.
         """
+        # Determine config path
+        config_path = config_path or "config.yml"
 
-        self.vGenP = None
-        self.vSOCP_cii = None
-        self.bounds = None
-        self.la = None
-        self.k = None
-        self.rp = None
-        self.long_format = None
-        self.i = None
-        self.app = None
+        # Initialize components
+        self._load_configuration(config_path)
+        self._load_data()
+        self._create_app()
+        self._setup_ui()
+        self._register_callbacks()
 
-        # Load configuration from this directory or from the provided path
-        config = h.load_config("config.yml") if config_path is None else h.load_config(config_path)
-        self.input_dir = config["input_dir"]
-        self.input_type = config["input_type"]
-        self.tables = config["tables"]
-        self.dropdown_options_y = config["dropdown_options_y"]
-        self.dropdown_options_x = config["dropdown_options_x"]
-        self.map_options = config["map_options"]
-        self.graph_options = config["graph_options"]
+    # =========================================================================
+    # Initialization Methods
+    # =========================================================================
 
-        if self.input_type not in ["excel", "sqlite", "V2G"]:
-            raise ValueError("Invalid input type. Please choose either 'excel', 'sqlite' or V2G.")
-
-        required_tables = ["i", "la", "vLineP", "pPmax", "k", "vGenP"]
-        missing = [t for t in required_tables if t not in self.tables]
-        if missing:
-            raise ValueError(f"Missing required table(s): {', '.join(missing)}")
-
-        self.load_data()  # Load data on initialization
-        self.js_generator = MarkerJS(self.map_options,
-                                     self.vGenP)  # Create instance of MarkerJS with vGenP data for pie chart sizing
-        self.create_app()  # Initialize Dash app
-        self.setup_layout()  # Define layout
-        self.setup_callbacks()  # Define callbacks
-
-    def load_data(self, ):
+    def _load_configuration(self, config_path: str) -> None:
         """
-        Loads the necessary data for the application.
+        Load and validate application configuration.
 
-        This method is intended to handle the data loading process. 
-        Ensure that the required data sources are accessible and properly formatted.
-        The dataframe containing the data about the buses is modified such that the index is set to "values" for easier indexing.
+        Args:
+            config_path: Path to configuration file.
         """
+        self.config = load_config(config_path)
+
+        # Store commonly accessed config values for backward compatibility
+        self.input_dir = self.config.input_dir
+        self.input_type = self.config.input_type
+        self.tables = self.config.tables
+        self.map_options = self._config_to_dict(self.config.map_options)
+        self.graph_options = self._config_to_dict(self.config.graph_options)
+        self.dropdown_options_y = self._dropdown_options_to_list(
+            self.config.dropdown_options_y
+        )
+        self.dropdown_options_x = self._dropdown_options_to_list(
+            self.config.dropdown_options_x
+        )
+
+    def _load_data(self) -> None:
+        """Load and process data from the configured source."""
+        # Load data into self (for backward compatibility with handlers)
         get_data(self)
 
-    def create_app(self):
-        """
-        Creates and initializes a Dash application instance.
+        # Create data provider for clean access
+        self.data_provider = DataProvider(self)
 
-        This method sets up a Dash application with specific configurations:
-            - `suppress_callback_exceptions`: Allows callbacks to be defined even if their corresponding components are not present in the initial layout.
-            - `prevent_initial_callbacks`: Disables the automatic triggering of callbacks when the app is first loaded.
+        # Store long_format flag
+        self.long_format = self.data_provider.is_long_format
 
-        Returns:
-            None
-        """
-        self.app = dash.Dash(__name__, suppress_callback_exceptions=True, prevent_initial_callbacks=False)
+        # Create marker generator
+        self.js_generator = MarkerJS(self.map_options, self.vGenP)
 
-    def setup_layout(self):
-        """
-        Sets up the layout for the Dash application.
-        This method defines the structure and components of the application's user interface, 
-        including dropdowns, sliders, buttons, and visualizations such as maps and graphs. 
-        The layout dynamically adjusts based on the data and configuration provided.
-
-        Key Features:
-            - Dropdowns for selecting representative periods, X-axis, and Y-axis options.
-            - A slider for selecting time periods, with an optional number input for precise selection.
-            - A range slider for selecting a range of time periods when in long format.
-            - A map visualization on the left side, displaying network data.
-            - A dynamic graph on the right side, which updates based on user interactions.
-
-        Components:
-            - Representative Period Dropdown: Allows selection of a specific representative period.
-            - Time Slider: Enables navigation through time periods.
-            - Time Slider Input: Provides precise input for time periods (visible in long format).
-            - Axis Dropdowns: Allows selection of X-axis and Y-axis variables for the graph.
-            - Local Button: A button for toggling scope or triggering specific actions.
-            - Range Slider: Allows selection of a range of time periods (visible in long format).
-            - Map: Displays a network visualization with tile layers and markers.
-            - Graph: Displays dynamic plots based on selected data.
-
-        Stores:
-            - `last-clicked-line`: Stores the index of the last clicked line.
-            - `last-clicked-node`: Stores the index of the last clicked node.
-            - `map-zoom`: Stores the default zoom level for the map.
-
-        Layout Structure:
-            - Top Row: Contains global controls such as dropdowns, sliders, and buttons.
-            - Main Section: Divided into two parts:
-                - Left: Map visualization.
-                - Right: Dynamic graph visualization.
-
-        Styling:
-            - The layout is styled for responsiveness, with flexible widths and heights.
-            - Components are aligned and spaced for a clean and user-friendly interface.
-
-        Note:
-            - The layout adapts based on the `long_format` flag, which determines the visibility of certain components and the configuration of sliders.
-
-        """
-
-        self.long_format = True if "rp" not in self.tables or (len(self.rp) == 1 and len(self.k) > 24) else False
-        display_time_range = 'block' if self.long_format else 'none'
-        display_rp = 'none' if self.long_format else 'block'
-        if not self.long_format:
-            options = [{"label": f"Period: {p}", "value": p} for p in self.rp["values"].values]
-            value = self.rp["values"][0]
-        else:
-            options = ["Period: All"]
-            value = "All"
-        self.app.layout = html.Div([
-
-            # === GLOBAL TOP CONTROLS ROW (RP dropdown + Slider on left, Axis dropdowns + Button on right) ===
-            html.Div([
-
-                html.Div([
-                    html.Div([
-                        dcc.Dropdown(
-                            id='rep-period-dropdown',
-                            options=options,
-                            value=value,
-                            clearable=False,
-                            style={'width': '130px', 'font-weight': 'bold'},
-                        ),
-                    ], style={'margin-right': '20px', 'display': display_rp}),
-
-                    # === Node Search Dropdown ===
-                    html.Div([
-                        dcc.Dropdown(
-                            id='node-search-dropdown',
-                            options=[{'label': node, 'value': node} for node in self.i.index],
-                            placeholder='Search node...',
-                            clearable=True,
-                            style={'width': '150px', 'font-weight': 'bold'},
-                        ),
-                    ], style={'margin-right': '20px'}),
-
-                    # === vLineP/vLineQ Toggle Button ===
-                    html.Div([
-                        html.Button("vLineP", id="pq-toggle-button", n_clicks=0, style={
-                            'minWidth': '50px',
-                            'padding': '6px 12px',
-                            'font-weight': 'bold',
-                        }),
-                    ], style={'margin-right': '20px'}),
-
-                    # === Time Slider + Optional Number Input ===
-                    html.Div([
-                        # Slider
-                        html.Div([
-                            dcc.Slider(
-                                id='time-slider',
-                                min=1,
-                                max=len(self.k),
-                                step=1,
-                                marks={
-                                    1: {'label': self.k["values"].values[0]},
-                                    len(self.k) // 2: {'label': self.k["values"].values[len(self.k) // 2 - 1]},
-                                    len(self.k): {'label': self.k["values"].values[-1]},
-                                },
-                                tooltip={"placement": "top", "always_visible": True},
-                                value=1,
-                            )
-                        ], style={'flex': '1'}),  # Slider fills most of the space
-
-                        # Number input (only if long format)
-                        html.Div([
-                            dcc.Input(
-                                id='time-slider-input',
-                                type='number',
-                                min=1,
-                                max=len(self.k),
-                                step=1,
-                                value=1,
-                                style={'width': '70px', 'margin-left': '10px'}
-                            )
-                        ], style={'display': display_time_range, 'flex': 'none'})  # input stays compact
-                    ], style={'flex': '1', 'display': 'flex', 'align-items': 'center', 'gap': '10px'}),
-
-                ], style={
-                    'display': 'flex',
-                    'align-items': 'center',
-                    'flex': '1',
-                    'margin-right': '20px',
-                    'min-width': '0',
-                    'max-width': '50%'
-                }),
-
-                # Right side: Axis Dropdowns + Button (left-aligned within their container) + RangeSlider
-                html.Div([
-                    html.Div([
-                        # html.Label("Y-Axis:", style={'font-weight': 'bold'}),
-                        dcc.Dropdown(
-                            id="y-axis-dropdown",
-                            options=self.dropdown_options_y,
-                            value=self.dropdown_options_y[0]['value'],
-                            clearable=False,
-                            style={'width': '120px', 'font-weight': 'bold'},
-                        ),
-                    ], style={'margin-right': '10px', 'margin-left': '4px'}),
-
-                    html.Div([
-                        # html.Label("X-Axis:", style={'font-weight': 'bold'}),
-                        dcc.Dropdown(
-                            id="x-axis-dropdown",
-                            options=self.dropdown_options_x,
-                            value=self.dropdown_options_x[0]['value'],
-                            clearable=False,
-                            style={'width': '120px', 'font-weight': 'bold'},
-                        ),
-                    ], style={'margin-right': '10px'}),
-
-                    html.Div([
-                        # html.Label("Scope:", style={'font-weight': 'bold'}),
-                        html.Button("Local", id="local-button", n_clicks=0, style={
-                            'minWidth': '80px',
-                            'padding': '6px 12px',
-                            'display': 'flex',
-                            'alignItems': 'center',
-                            'font-weight': 'bold',
-                        }),
-                    ]),
-                    # add additional slider for the range of k values if long format
-                    html.Div([
-                        dcc.RangeSlider(
-                            id='time-slider-range',
-                            min=1,
-                            max=len(self.k),
-                            step=1,
-                            marks={
-                                1: {'label': self.k["values"].values[0]},
-                                len(self.k) // 2: {'label': self.k["values"].values[len(self.k) // 2 - 1]},
-                                len(self.k): {'label': self.k["values"].values[-1]},
-                            },
-                            tooltip={"placement": "top", "always_visible": True},
-                            # allowCross=False,
-                            value=[1, 24],
-                            pushable=24,
-
-                        ),
-
-                    ], style={'margin-right': '10px', "flex": "1", "display": display_time_range}),
-
-                ], style={
-                    'display': 'flex',
-                    'align-items': 'center',
-                    'justify-content': 'flex-start',
-                    'width': '50%',
-                }),
-
-            ], style={
-                'display': 'flex',
-                'align-items': 'center',
-                'margin-bottom': '10px',
-                'justify-content': 'space-between',
-                'flex-wrap': 'wrap'
-            }),
-
-            dcc.Store(id="last-clicked-line", data=str(self.la.index[0])),
-            dcc.Store(id="last-clicked-node", data=self.i.index[0]),
-            dcc.Store(id="map-zoom", data=self.map_options["default_zoom"]),  # Default zoom
-
-            # === MAIN SECTION: Map + Graph ===
-            html.Div([
-
-                # Left Section: Map
-                html.Div([
-                    dl.Map(children=[
-                        dl.TileLayer(url='https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-                                     attribution='&copy; <a href="https://carto.com/">CARTO</a>'),
-                        dl.ZoomControl(position='topright'),
-                        html.Div(id="network-layer"),
-                        html.Div(id="node-wrapper"),
-                    ], bounds=self.bounds, style={'height': '100%', 'width': '100%', 'background-color': '#6BA3A3'},
-                        id="network-map", zoomControl=False, center=[np.mean(self.i['lat']), np.mean(self.i['lon'])]),
-                ], style={'flex': '1', 'min-width': '0', 'height': '90vh'}),
-
-                # Right Section: Graph
-                html.Div([
-                    dcc.Graph(id="dynamic-plot",
-                              style={'width': '100%', 'height': '100%', 'background-color': '#6BA3A3'}),
-                    # NOTE: this whole html.Div is replaced in the callback !!
-                ], id="dynamic-plot-container",
-                    style={'flex': '1', 'min-width': '0', 'height': '90vh', 'margin-top': '0px'})
-            ], style={'display': 'flex', 'gap': '10px', 'height': '90vh', 'flex-wrap': 'wrap'}),
-        ], style={"background-color": "#6BA3A3", "padding": "10px"})
-
-    def setup_callbacks(self):
-        """
-        Sets up all the Dash callbacks for the application.
-        This method defines multiple callbacks to handle user interactions and update
-        the application state dynamically. The callbacks include:
-
-        1. `update_network`: Updates the network map based on the selected period,
-            time, and zoom level.
-            - Outputs: Updates the "children" property of the "network-map" component.
-            - Inputs: "rep-period-dropdown" value, "time-slider" value, and "map-zoom" data.
-        2. `store_last_clicked_line`: Stores the ID of the last clicked line.
-            - Outputs: Updates the "data" property of the "last-clicked-line" component.
-            - Inputs: Click events for each line in the dataset.
-        3. `store_last_clicked_node`: Stores the ID of the last clicked node or searched node.
-            - Outputs: Updates the "data" property of the "last-clicked-node" component.
-            - Inputs: Click events for nodes and node search dropdown.
-        4. `sync_slider_and_input`: Synchronizes the values of the time slider and its corresponding input field.
-            - Outputs: Updates the "value" properties of both the "time-slider" and
-              "time-slider-input" components.
-            - Inputs: "time-slider" value and "time-slider-input" value.
-        5. `toggle_button_label`: Toggles the label of the "local-button" between
-            "Local" and "Global" based on the number of clicks.
-            - Outputs: Updates the "children" property of the "local-button" component.
-            - Inputs: Click events on the "local-button".
-        6. `store_map_zoom`: Stores the current zoom level of the network map.
-            - Outputs: Updates the "data" property of the "map-zoom" component.
-            - Inputs: "zoom" property of the "network-map" component.
-        7. `update_dynamic_plot`: Updates the dynamic plot based on various user inputs, including axis selections, clicked line or node, selected period, scope, and time range.
-            - Outputs: Updates the "children" property of the "dynamic-plot-container"
-              component.
-            - Inputs: "x-axis-dropdown" value, "y-axis-dropdown" value,
-              "last-clicked-line" data, "last-clicked-node" data,
-              "rep-period-dropdown" value, "local-button" children, and
-              "time-slider-range" value.
-
-        Each callback is designed to handle specific interactions and ensure the
-        application responds dynamically to user inputs.
-        """
-
-        @self.app.callback(
-            [
-                Output("network-layer", "children"),
-                Output("node-wrapper", "children")],
-            [
-                Input("rep-period-dropdown", "value"),
-                Input("time-slider", "value"),
-                Input("map-zoom", "data"),
-                Input("network-map", "viewport"),
-                Input("pq-toggle-button", "children")
-            ],
+    def _create_app(self) -> None:
+        """Create and configure the Dash application instance."""
+        self.app = dash.Dash(
+            __name__,
+            suppress_callback_exceptions=True,
+            prevent_initial_callbacks=False
         )
-        def update_network(selected_period, selected_time, zoom_level, viewport, pq_mode):
-            if viewport and 'zoom' in viewport:
-                zoom_level = viewport['zoom']
-            arrows, node_layer = generate_network_map(
+
+        # Set app title
+        self.app.title = "LEGO-GPT"
+
+    def _setup_ui(self) -> None:
+        """Build and assign the application layout."""
+        layout_builder = LayoutBuilder(self.config, self.data_provider)
+        self.app.layout = layout_builder.build()
+
+    def _register_callbacks(self) -> None:
+        """Register all application callbacks."""
+        # Create visualization handlers that wrap existing functions
+        visualization_handlers = {
+            'network_map': self._create_network_map_handler(),
+            'dynamic_plot': self._create_dynamic_plot_handler()
+        }
+
+        # Create and register callback manager
+        callback_manager = CallbackManager(
+            app=self.app,
+            config=self.config,
+            data_provider=self.data_provider,
+            visualization_handlers=visualization_handlers
+        )
+        callback_manager.register_all()
+
+    # =========================================================================
+    # Visualization Handler Factories
+    # =========================================================================
+
+    def _create_network_map_handler(self):
+        """Create handler function for network map updates."""
+
+        def handler(selected_period, selected_time, zoom_level, pq_mode):
+            return generate_network_map(
                 self=self,
                 selected_period=selected_period,
                 selected_time=selected_time,
                 zoom_level=zoom_level,
-                pq_mode=pq_mode,
+                pq_mode=pq_mode
             )
-            return arrows, node_layer
 
-        @self.app.callback(
-            Output("last-clicked-line", "data"),
-            [Input(str(line.Index), "n_clicks") for line in self.la.itertuples(index=True)]
-        )
-        def store_last_clicked_line(*args):
-            if not ctx.triggered:
-                return None
+        return handler
 
-            clicked_id = ctx.triggered[0]['prop_id'].split('.')[0]
-            print(f"Clicked line: {clicked_id}")
-            return clicked_id
+    def _create_dynamic_plot_handler(self):
+        """Create handler function for dynamic plot updates."""
 
-        @self.app.callback(
-            Output("last-clicked-node", "data"),
-            [Input("node-layer", "clickData"),
-             Input("node-search-dropdown", "value")],
-        )
-        def store_last_clicked_node(click_data, search_value):
-            if not ctx.triggered:
-                return dash.no_update
-
-            triggered_id = ctx.triggered[0]['prop_id'].split('.')[0]
-
-            if triggered_id == "node-search-dropdown" and search_value:
-                return search_value
-            elif triggered_id == "node-layer" and click_data:
-                clicked_id = click_data["properties"]["id"]
-                print(f"Clicked node: {clicked_id}")
-                return clicked_id
-
-            return dash.no_update
-
-        @self.app.callback(
-            Output("time-slider", "value"),
-            Output("time-slider-input", "value"),
-            Input("time-slider", "value"),
-            Input("time-slider-input", "value"),
-        )
-        def sync_slider_and_input(slider_val, input_val):
-            ctx = dash.callback_context
-            if not ctx.triggered:
-                raise dash.exceptions.PreventUpdate
-
-            triggered_id = ctx.triggered[0]['prop_id'].split('.')[0]
-            if triggered_id == "time-slider":
-                return slider_val, slider_val
-            else:
-                return input_val, input_val
-
-        @self.app.callback(
-            Output("local-button", "children"),
-            Input("local-button", "n_clicks")
-        )
-        def toggle_button_label(n_clicks):
-            if n_clicks % 2 == 0:
-                return "Local"
-            else:
-                return "Global"
-
-        @self.app.callback(
-            Output("pq-toggle-button", "children"),
-            Input("pq-toggle-button", "n_clicks")
-        )
-        def toggle_pq_label(n_clicks):
-            if n_clicks % 2 == 0:
-                return "vLineP"
-            else:
-                return "vLineQ"
-
-        @self.app.callback(
-            Output("map-zoom", "data"),
-            Input("network-map", "zoom")
-        )
-        def store_map_zoom(zoom_level):
-            return zoom_level
-
-        @self.app.callback(
-            Output("network-map", "viewport"),
-            Input("node-search-dropdown", "value"),
-            prevent_initial_call=True
-        )
-        def zoom_to_node(node_name):
-            if node_name and node_name in self.i.index:
-                lat = self.i.loc[node_name, 'lat']
-                lon = self.i.loc[node_name, 'lon']
-                return {'center': [lat, lon], 'zoom': 12}
-            return dash.no_update
-
-        @self.app.callback(
-            Output("dynamic-plot-container", "children"),
-            [Input("x-axis-dropdown", "value"),
-             Input("y-axis-dropdown", "value"),
-             Input("last-clicked-line", "data"),
-             Input("last-clicked-node", "data"),
-             Input("rep-period-dropdown", "value"),
-             Input("local-button", "children"),
-             Input("time-slider-range", "value")],
-            # prevent_initial_call=True
-
-        )
-        def update_dynamic_plot(x_axis, y_axis, line_idx, node_idx, selected_period, scope, time_range):
+        def handler(x_axis, y_axis, line_idx, node_idx, selected_period, scope, time_range):
             return generate_dynamic_plot(
                 self=self,
                 x_axis=x_axis,
@@ -549,29 +191,117 @@ class LEGO_GPT:
                 time_range=time_range
             )
 
-    def run(self):
-        """
-        Starts the application by running the Flask development server.
+        return handler
 
-        This method initializes and runs the Flask application with debugging
-        disabled for production use.
+    # =========================================================================
+    # Configuration Conversion Helpers
+    # =========================================================================
+
+    @staticmethod
+    def _config_to_dict(config_obj) -> dict:
+        """
+        Convert a configuration object to dictionary.
+
+        Args:
+            config_obj: Configuration dataclass or dict.
 
         Returns:
-            None
+            Dictionary representation of the configuration.
         """
-        self.app.run(debug=False)
+        if hasattr(config_obj, '__dataclass_fields__'):
+            result = {}
+            for field_name in config_obj.__dataclass_fields__:
+                value = getattr(config_obj, field_name)
+                if hasattr(value, '__dataclass_fields__'):
+                    result[field_name] = LEGO_GPT._config_to_dict(value)
+                else:
+                    result[field_name] = value
+            return result
+        elif isinstance(config_obj, dict):
+            return config_obj
+        else:
+            return {}
+
+    @staticmethod
+    def _dropdown_options_to_list(options) -> list[dict]:
+        """
+        Convert dropdown options to list of dicts.
+
+        Args:
+            options: List of DropdownOption objects or dicts.
+
+        Returns:
+            List of dicts with 'label' and 'value' keys.
+        """
+        result = []
+        for opt in options:
+            if hasattr(opt, 'label') and hasattr(opt, 'value'):
+                result.append({"label": opt.label, "value": opt.value})
+            elif isinstance(opt, dict):
+                result.append(opt)
+        return result
+
+    # =========================================================================
+    # Public Interface
+    # =========================================================================
+
+    def run(
+            self,
+            debug: bool = False,
+            host: str = "127.0.0.1",
+            port: int = 8050
+    ) -> None:
+        """
+        Start the Dash application server.
+
+        Args:
+            debug: Enable debug mode with auto-reload.
+            host: Host address to bind to.
+            port: Port number to listen on.
+        """
+        self.app.run(debug=debug, host=host, port=port)
+
+    def get_server(self):
+        """
+        Get the underlying Flask server.
+
+        Useful for deploying with WSGI servers like gunicorn.
+
+        Returns:
+            Flask server instance.
+        """
+        return self.app.server
+
+
+# =============================================================================
+# Command Line Interface
+# =============================================================================
+
+def main():
+    """Main entry point for command line execution."""
+    # Parse command line arguments
+    config_path = sys.argv[1] if len(sys.argv) > 1 else "config.yml"
+
+    # Check if config exists, create default if not
+    if not os.path.exists(config_path):
+        print(f"Configuration file not found: {config_path}")
+        h.copy_default_config(config_path)
+        print("Please edit the configuration file and run again.")
+        sys.exit(1)
+
+    # Create and run application
+    try:
+        app = LEGO_GPT(config_path=config_path)
+        print(f"Starting LEGO-GPT server...")
+        print(f"Open http://127.0.0.1:8050 in your browser")
+        app.run(debug=False)
+    except FileNotFoundError as e:
+        print(f"Error: {e}")
+        sys.exit(1)
+    except ValueError as e:
+        print(f"Configuration error: {e}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
-    # check for passed config file (if calling from command line)
-    if len(sys.argv) > 1:
-        config_path = sys.argv[1]
-    else:
-        config_path = "config.yml"
-
-    # fallback if config doesn't exist
-    if not os.path.exists(config_path):
-        h.copy_default_config()  # assumes it writes to config.yml
-    else:
-        # Run with specified config
-        LEGO_GPT(config_path=config_path).run()
+    main()
