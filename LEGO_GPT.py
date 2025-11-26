@@ -131,9 +131,6 @@ class LEGO_GPT:
         """
         get_data(self)
 
-        # Set index of self.i to "values" for simpler indexing
-        self.i.set_index("values", inplace=True)
-
     def create_app(self):
         """
         Creates and initializes a Dash application instance.

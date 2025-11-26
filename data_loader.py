@@ -1,460 +1,732 @@
+"""
+Data Loader Module for LEGO-GPT
+
+This module provides data loading functionality for different input formats (SQLite, Excel).
+It uses a strategy pattern to allow easy extension for new data sources.
+"""
+
 import os
 import sqlite3
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
+from typing import Optional
 
+import numpy as np
 import pandas as pd
 
 import helper_functions as h
-from InOutModule import ExcelReader
-from InOutModule.ExcelWriter import ExcelWriter
 
 
-def get_data(obj):
+# =============================================================================
+# Data Container
+# =============================================================================
+
+@dataclass
+class LEGOData:
+    """Container for all LEGO model data."""
+
+    # Sets
+    i: pd.DataFrame = field(default_factory=pd.DataFrame)  # Nodes
+    k: pd.DataFrame = field(default_factory=pd.DataFrame)  # Time steps
+    rp: pd.DataFrame = field(default_factory=pd.DataFrame)  # Representative periods
+    g: pd.DataFrame = field(default_factory=pd.DataFrame)  # Generators
+    la: pd.DataFrame = field(default_factory=pd.DataFrame)  # Lines (arcs)
+    gi: pd.DataFrame = field(default_factory=pd.DataFrame)  # Generator-node mapping with technology
+
+    # Variables
+    vLineP: pd.DataFrame = field(default_factory=pd.DataFrame)  # Active power flow
+    vLineQ: Optional[pd.DataFrame] = None  # Reactive power flow
+    vGenP: pd.DataFrame = field(default_factory=pd.DataFrame)  # Generator active power
+    vSOCP_cii: Optional[pd.DataFrame] = None  # Voltage (SOCP formulation)
+    vStIntraRes: Optional[pd.DataFrame] = None  # Storage state of charge
+
+    # Parameters
+    pPmax: pd.DataFrame = field(default_factory=pd.DataFrame)  # Line capacity
+    coords: pd.DataFrame = field(default_factory=pd.DataFrame)  # Node coordinates
+    voltage_bounds: Optional[pd.DataFrame] = None  # Voltage bounds per node
+
+    # Computed attributes
+    bounds: list = field(default_factory=list)  # Map bounds [min, max]
+
+
+# =============================================================================
+# Abstract Base Loader
+# =============================================================================
+
+class DataLoaderStrategy(ABC):
+    """Abstract base class for data loaders."""
+
+    @abstractmethod
+    def load(self, input_dir: str, tables: list[str]) -> LEGOData:
+        """
+        Load data from the specified input directory.
+
+        Args:
+            input_dir: Path to the input data directory or file.
+            tables: List of table names to load.
+
+        Returns:
+            LEGOData container with all loaded data.
+        """
+        pass
+
+
+# =============================================================================
+# SQLite Data Loader
+# =============================================================================
+
+class SQLiteDataLoader(DataLoaderStrategy):
+    """Data loader for SQLite database format."""
+
+    # Technology inference rules based on generator name prefixes
+    TECHNOLOGY_PREFIXES = {
+        "PV_": "Solar",
+        "WIND_": "Wind",
+        "BSS_": "BESS",
+        "HS_": "HS",
+        "HPS_": "HPS",
+        "ROR_": "RoR",
+        "COAL_": "Coal",
+        "GAS_": "Gas",
+        "NUC_": "Nuclear",
+        "OIL_": "Oil",
+    }
+
+    def load(self, input_dir: str, tables: list[str]) -> LEGOData:
+        """
+        Load data from a SQLite database.
+
+        Args:
+            input_dir: Path to the directory containing result.sqlite or model.sqlite.
+            tables: List of table names to load.
+
+        Returns:
+            LEGOData container with all loaded data.
+        """
+        data = LEGOData()
+
+        # Determine SQLite file path
+        db_path = self._find_database(input_dir)
+
+        with sqlite3.connect(db_path) as conn:
+            # Load sets
+            if "i" in tables:
+                data.i = self._load_set(conn, "i")
+            if "k" in tables:
+                data.k = self._load_set(conn, "k")
+            if "rp" in tables:
+                data.rp = self._load_set(conn, "rp")
+            if "g" in tables:
+                data.g = self._load_set(conn, "g")
+            if "la" in tables:
+                data.la = self._load_lines(conn)
+
+            # Load generator-node mapping with technology
+            if "gi" in tables:
+                data.gi = self._load_gi(conn)
+
+            # Load variables
+            if "vLineP" in tables:
+                data.vLineP = self._load_vline(conn, "vLineP", data.la)
+            if "vLineQ" in tables:
+                data.vLineQ = self._load_vline(conn, "vLineQ", data.la)
+            if "vGenP" in tables:
+                data.vGenP = self._load_vgenp(conn)
+            if "vSOCP_cii" in tables:
+                data.vSOCP_cii = self._load_vsocp_cii(conn)
+            if "vStIntraRes" in tables:
+                data.vStIntraRes = self._load_vstintrares(conn, data.gi)
+
+            # Load parameters
+            if "pPmax" in tables:
+                data.pPmax = self._load_ppmax(conn, data.la)
+
+            # Load coordinates (try coords table, otherwise create dummy)
+            if "coords" in tables:
+                data.coords = self._load_coords(conn, data.i)
+
+            # Load voltage bounds
+            if "voltage_bounds" in tables:
+                data.voltage_bounds = self._load_voltage_bounds(conn)
+
+        return data
+
+    @staticmethod
+    def _find_database(input_dir: str) -> str:
+        """Find the SQLite database file in the input directory."""
+        for filename in ["model.sqlite", "result.sqlite"]:
+            path = os.path.join(input_dir, filename)
+            if os.path.exists(path):
+                return path
+
+        # If input_dir is the file itself
+        if os.path.isfile(input_dir) and input_dir.endswith(".sqlite"):
+            return input_dir
+
+        raise FileNotFoundError(
+            f"No SQLite database found in {input_dir}. "
+            "Expected 'model.sqlite' or 'result.sqlite'."
+        )
+
+    @staticmethod
+    def _load_set(conn: sqlite3.Connection, table_name: str) -> pd.DataFrame:
+        """Load a set table (i, k, rp, g) and standardize column names."""
+        df = pd.read_sql_query(f"SELECT * FROM {table_name}", conn)
+
+        # Drop index column if present
+        if "index" in df.columns:
+            df = df.drop(columns=["index"])
+
+        # Rename first column to 'values'
+        if "0" in df.columns:
+            df = df.rename(columns={"0": "values"})
+
+        return df
+
+    @staticmethod
+    def _load_lines( conn: sqlite3.Connection) -> pd.DataFrame:
+        """Load line set (la) and standardize column names."""
+        df = pd.read_sql_query("SELECT * FROM la", conn)
+
+        # Drop index column if present
+        if "index" in df.columns:
+            df = df.drop(columns=["index"])
+
+        # Rename columns: 0 -> i, 1 -> j, 2 -> c
+        rename_map = {"0": "i", "1": "j", "2": "c"}
+        df = df.rename(columns=rename_map)
+
+        # Ensure string types
+        df["i"] = df["i"].astype(str)
+        df["j"] = df["j"].astype(str)
+        if "c" in df.columns:
+            df["c"] = df["c"].astype(str)
+
+        return df
+
+    def _load_gi(self, conn: sqlite3.Connection) -> pd.DataFrame:
+        """
+        Load generator-node mapping and infer technology type.
+
+        Uses gi table for generators and gi_storage for storage units.
+        Technology is inferred from generator name prefixes.
+        """
+        # Load main gi table
+        df_gi = pd.read_sql_query("SELECT * FROM gi", conn)
+        if "index" in df_gi.columns:
+            df_gi = df_gi.drop(columns=["index"])
+        df_gi = df_gi.rename(columns={"0": "g", "1": "i"})
+
+        # Load gi_storage if exists
+        try:
+            df_gi_storage = pd.read_sql_query("SELECT * FROM gi_storage", conn)
+            if "index" in df_gi_storage.columns:
+                df_gi_storage = df_gi_storage.drop(columns=["index"])
+            df_gi_storage = df_gi_storage.rename(columns={"0": "g", "1": "i"})
+
+            # Combine gi and gi_storage
+            df_gi = pd.concat([df_gi, df_gi_storage], ignore_index=True).drop_duplicates()
+        except Exception:
+            pass  # gi_storage may not exist
+
+        # Infer technology from generator names
+        df_gi["tec"] = df_gi["g"].apply(self._infer_technology)
+
+        return df_gi
+
+    def _infer_technology(self, generator_name: str) -> str:
+        """Infer technology type from generator name prefix."""
+        gen_upper = generator_name.upper()
+
+        for prefix, technology in self.TECHNOLOGY_PREFIXES.items():
+            if gen_upper.startswith(prefix):
+                return technology
+
+        return "unknown"
+
+    def _load_vline(
+            self,
+            conn: sqlite3.Connection,
+            table_name: str,
+            la: pd.DataFrame
+    ) -> pd.DataFrame:
+        """
+        Load line flow variable (vLineP or vLineQ) and process duplicates.
+
+        Args:
+            conn: Database connection.
+            table_name: Table name (vLineP or vLineQ).
+            la: Lines dataframe for line indexing.
+
+        Returns:
+            Processed line flow dataframe with line indices and canonical IDs.
+        """
+        df = pd.read_sql_query(f"SELECT * FROM {table_name}", conn)
+
+        # Rename columns from level_X format
+        rename_map = {
+            "level_0": "rp",
+            "level_1": "k",
+            "level_2": "i",
+            "level_3": "j",
+            "level_4": "c"
+        }
+        df = df.rename(columns=rename_map)
+
+        # Ensure string types for node columns
+        df["i"] = df["i"].astype(str)
+        df["j"] = df["j"].astype(str)
+
+        # Add canonical line identifier for safe merging
+        df = h.add_canonical_line_ids(df, "i", "j")
+
+        # Generate unique line index (direction-insensitive)
+        line_index_dict = self._build_line_index(la)
+
+        # Map each row to its line index and detect duplicates
+        df["line"] = df.apply(
+            lambda row: self._get_line_index(row, line_index_dict),
+            axis=1
+        )
+        df["duplicate"] = df.apply(
+            lambda row: self._is_duplicate(row, la, line_index_dict),
+            axis=1
+        )
+
+        # Reverse flow values for duplicate (reverse direction) entries
+        df.loc[df["duplicate"], "values"] *= -1
+
+        # Average flows for same line and time step
+        df["values"] = df.groupby(["line", "k"])["values"].transform(
+            lambda x: x.mean() if len(x) > 1 else x
+        )
+
+        # Keep only non-duplicate entries
+        df = df[~df["duplicate"]].copy()
+        df = df.drop(columns=["duplicate"])
+        df = df.reset_index(drop=True)
+
+        # Convert line to string for consistency with callback IDs
+        df["line"] = df["line"].astype(str)
+
+        return df
+
+    @staticmethod
+    def _build_line_index(la: pd.DataFrame) -> dict:
+        """Build a mapping from frozenset(i, j) to line index."""
+        line_index = {}
+        for idx, row in la.iterrows():
+            key = frozenset([str(row["i"]), str(row["j"])])
+            if key not in line_index:
+                line_index[key] = len(line_index)
+        return line_index
+
+    @staticmethod
+    def _get_line_index(row: pd.Series, line_index_dict: dict) -> int:
+        """Get the line index for a row."""
+        key = frozenset([str(row["i"]), str(row["j"])])
+        return line_index_dict.get(key, -1)
+
+    @staticmethod
+    def _is_duplicate(
+            row: pd.Series,
+            la: pd.DataFrame,
+            line_index_dict: dict) -> bool:
+        """Check if row is a duplicate (reverse direction) entry."""
+        key = frozenset([str(row["i"]), str(row["j"])])
+        line_idx = line_index_dict.get(key, -1)
+
+        if line_idx < 0 or line_idx >= len(la):
+            return False
+
+        original_line = la.iloc[line_idx]
+        return [str(row["i"]), str(row["j"])] != [str(original_line["i"]), str(original_line["j"])]
+
+    @staticmethod
+    def _load_vgenp(conn: sqlite3.Connection) -> pd.DataFrame:
+        """Load generator power variable (vGenP)."""
+        df = pd.read_sql_query("SELECT * FROM vGenP", conn)
+
+        # Table should already have proper column names: rp, k, g, values
+        required_cols = ["rp", "k", "g", "values"]
+
+        # Ensure all required columns exist
+        for col in required_cols:
+            if col not in df.columns:
+                raise ValueError(f"vGenP missing required column: {col}")
+
+        return df[required_cols]
+
+    @staticmethod
+    def _load_vsocp_cii(conn: sqlite3.Connection) -> pd.DataFrame:
+        """Load voltage variable (vSOCP_cii)."""
+        df = pd.read_sql_query("SELECT * FROM vSOCP_cii", conn)
+
+        required_cols = ["rp", "k", "i", "values"]
+        for col in required_cols:
+            if col not in df.columns:
+                raise ValueError(f"vSOCP_cii missing required column: {col}")
+
+        return df[required_cols]
+
+    @staticmethod
+    def _load_vstintrares(
+            conn: sqlite3.Connection,
+            gi: pd.DataFrame) -> pd.DataFrame:
+        """
+        Load storage state of charge variable (vStIntraRes).
+
+        Adds node information from gi mapping.
+        """
+        df = pd.read_sql_query("SELECT * FROM vStIntraRes", conn)
+
+        # Rename storage unit column
+        if "intraStorageUnits" in df.columns:
+            df = df.rename(columns={"intraStorageUnits": "storageUnits"})
+
+        required_cols = ["rp", "k", "storageUnits", "values"]
+        for col in required_cols:
+            if col not in df.columns:
+                raise ValueError(f"vStIntraRes missing required column: {col}")
+
+        # Add node information from gi
+        df = df.merge(
+            gi[["g", "i"]],
+            left_on="storageUnits",
+            right_on="g",
+            how="left"
+        ).drop(columns=["g"])
+
+        return df
+
+    def _load_ppmax(self, conn: sqlite3.Connection, la: pd.DataFrame) -> pd.DataFrame:
+        """Load line capacity parameter (pPmax)."""
+        df = pd.read_sql_query("SELECT * FROM pPmax", conn)
+
+        # Rename columns from level_X format
+        rename_map = {
+            "level_0": "i",
+            "level_1": "j",
+            "level_2": "c"
+        }
+        df = df.rename(columns=rename_map)
+
+        # Ensure string types
+        df["i"] = df["i"].astype(str)
+        df["j"] = df["j"].astype(str)
+
+        # Add canonical line identifier
+        df = h.add_canonical_line_ids(df, "i", "j")
+
+        # Build line index
+        line_index_dict = self._build_line_index(la)
+
+        # Map to line indices
+        df["line"] = df.apply(
+            lambda row: self._get_line_index(row, line_index_dict),
+            axis=1
+        )
+
+        # Average values for duplicate lines (same line, different directions)
+        df = (
+            df.groupby("line_id", as_index=False)
+            .agg({"values": "mean", "line": "first"})
+        )
+
+        # Convert line to string for consistency
+        df["line"] = df["line"].astype(str)
+
+        return df
+
+    def _load_coords(
+            self,
+            conn: sqlite3.Connection,
+            i_df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Load node coordinates.
+
+        Tries to load from 'coords' table if it exists, otherwise creates dummy coordinates.
+        """
+        try:
+            df = pd.read_sql_query("SELECT * FROM coords", conn)
+
+            # Expected columns: values (node name), lat, lon
+            if "values" not in df.columns:
+                # Try to rename common patterns
+                if "i" in df.columns:
+                    df = df.rename(columns={"i": "values"})
+                elif "0" in df.columns:
+                    df = df.rename(columns={"0": "values"})
+
+            df["values"] = df["values"].astype(str)
+            return df
+
+        except Exception:
+            # Create dummy coordinates for visualization
+            print("Warning: 'coords' table not found. Creating dummy coordinates.")
+            return self._create_dummy_coords(i_df)
+
+    @staticmethod
+    def _create_dummy_coords(i_df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Create dummy coordinates arranged in a grid pattern.
+
+        Args:
+            i_df: Nodes dataframe with 'values' column.
+
+        Returns:
+            DataFrame with columns: values, lat, lon
+        """
+        n_nodes = len(i_df)
+        grid_size = int(np.ceil(np.sqrt(n_nodes)))
+
+        coords_data = []
+        for idx, row in i_df.iterrows():
+            # Arrange nodes in a grid
+            grid_row = idx // grid_size
+            grid_col = idx % grid_size
+
+            # Use arbitrary lat/lon starting point (can be configured)
+            lat = 47.0 + grid_row * 0.01  # ~1km spacing
+            lon = 15.0 + grid_col * 0.01
+
+            coords_data.append({
+                "values": str(row["values"]),
+                "lat": lat,
+                "lon": lon
+            })
+
+        return pd.DataFrame(coords_data)
+
+    @staticmethod
+    def _load_voltage_bounds(conn: sqlite3.Connection) -> pd.DataFrame:
+        """Load voltage bounds (pBusMaxV and pBusMinV)."""
+        try:
+            df_max = pd.read_sql_query("SELECT * FROM pBusMaxV", conn)
+            df_min = pd.read_sql_query("SELECT * FROM pBusMinV", conn)
+
+            # Rename value columns
+            df_max = df_max.rename(columns={"values": "pBusMaxV"})
+            df_min = df_min.rename(columns={"values": "pBusMinV"})
+
+            # Merge on node name
+            df = df_max.merge(df_min[["i", "pBusMinV"]], on="i", how="outer")
+            df = df.rename(columns={"i": "values"})
+            df = df.set_index("values")
+
+            return df
+
+        except Exception as e:
+            print(f"Warning: Could not load voltage bounds: {e}")
+            return None
+
+
+# =============================================================================
+# Excel Data Loader (Backwards Compatibility)
+# =============================================================================
+
+class ExcelDataLoader(DataLoaderStrategy):
+    """Data loader for Excel file format (legacy support)."""
+
+    def load(self, input_dir: str, tables: list[str]) -> LEGOData:
+        """
+        Load data from Excel files.
+
+        Args:
+            input_dir: Path to the directory containing Excel files.
+            tables: List of table names to load.
+
+        Returns:
+            LEGOData container with all loaded data.
+        """
+        data = LEGOData()
+
+        for table in tables:
+            if table == "vLineP":
+                df, df_lines = h.extract_excel_to_dataframe(input_dir, table)
+                data.vLineP = df
+                data.la = df_lines
+            elif table == "vLineQ":
+                df, _ = h.extract_excel_to_dataframe(input_dir, table)
+                data.vLineQ = df
+            elif table == "gi":
+                df, df_g = h.extract_excel_to_dataframe(input_dir, table)
+                data.gi = df
+                data.g = df_g
+            elif table in ("la", "g"):
+                # These are loaded from other tables
+                continue
+            elif table == "coords":
+                data.coords = h.extract_excel_to_dataframe(input_dir, table)
+            elif table == "voltage_bounds":
+                data.voltage_bounds = h.extract_excel_to_dataframe(input_dir, table)
+            else:
+                result = h.extract_excel_to_dataframe(input_dir, table)
+                if result is not None:
+                    setattr(data, table, result)
+
+        # Process vLineP duplicates
+        if data.vLineP is not None and "duplicate" in data.vLineP.columns:
+            data.vLineP = data.vLineP[~data.vLineP["duplicate"]].copy()
+            data.vLineP = data.vLineP.drop(columns=["duplicate"])
+
+        # Process vLineQ duplicates
+        if data.vLineQ is not None and "duplicate" in data.vLineQ.columns:
+            data.vLineQ = data.vLineQ[~data.vLineQ["duplicate"]].copy()
+            data.vLineQ = data.vLineQ.drop(columns=["duplicate"])
+
+        # Add storage node info
+        if data.vStIntraRes is not None and data.gi is not None:
+            if "storageUnits" in data.vStIntraRes.columns:
+                data.vStIntraRes = data.vStIntraRes.merge(
+                    data.gi[["g", "i"]],
+                    left_on="storageUnits",
+                    right_on="g",
+                    how="left"
+                ).drop(columns=["g"])
+
+        return data
+
+
+# =============================================================================
+# Main Data Loading Function
+# =============================================================================
+
+def get_data(obj) -> None:
     """
-    Load and process data from various input sources (SQLite, Excel, or V2G) into the object's attributes.
-    This function handles data extraction, transformation, and loading based on the specified input type.
-    It supports SQLite databases, Excel files, and V2G-specific formats. The processed data is stored
-    as attributes of the provided object (`obj`).
+    Load and process data from various input sources into the object's attributes.
+
+    This function handles data extraction, transformation, and loading based on 
+    the specified input type. It supports SQLite databases and Excel files.
+
     Args:
         obj: An object with the following attributes:
-            - input_type (str): The type of input data. Must be one of "sqlite", "excel", or "V2G".
+            - input_type (str): The type of input data ("sqlite" or "excel").
             - input_dir (str): The directory containing the input files or database.
             - tables (list): A list of table names to load and process.
+
     Raises:
-        ValueError: If the `input_type` is not one of "sqlite", "excel", or "V2G".
+        ValueError: If the input_type is not "sqlite" or "excel".
+
     Note:
-        - For SQLite input, the function connects to a SQLite database and extracts tables into pandas DataFrames.
-        - For Excel input, the function reads tables from Excel files and processes them accordingly.
-        - For V2G input, the function processes data specific to the V2G format, including handling duplicate lines and calculating relative values.
-
-    Attributes Set on `obj`:
-        - Various attributes corresponding to the loaded tables (e.g., `vLineP`, `pPmax`, `coords`, etc.).
-        - `coords`: A DataFrame containing latitude and longitude information.
-        - `bounds`: A list of coordinate bounds for map display.
-        - `vLineP_max`: The maximum value in the `vLineP` DataFrame.
-        - `vLineP_min`: The minimum value in the `vLineP` DataFrame.
-
-    Processing Details:
-        - Renames columns and drops unnecessary ones for consistency.
-        - Handles duplicate entries in `vLineP` and adjusts flow values accordingly.
-        - Computes relative values (`rel_values`) for `vLineP` based on `pPmax`.
-        - Merges coordinate data into the `i` DataFrame.
-        - Computes bounds for map display based on latitude and longitude.
-
-    Example Usage:
-
-        obj = SomeClass()
-        obj.input_type = "sqlite"
-        obj.input_dir = "/path/to/data"
-        obj.tables = ["vLineP", "pPmax", "coords"]
-        get_data(obj)
+        The processed data is stored as attributes of the provided object.
+        After calling this function, the object will have attributes like:
+        - i: Node information DataFrame (indexed by 'values')
+        - k: Time steps DataFrame
+        - rp: Representative periods DataFrame
+        - gi: Generator-node mapping with technology
+        - la: Lines DataFrame
+        - vLineP: Line active power flow DataFrame
+        - vGenP: Generator power DataFrame
+        - pPmax: Line capacity DataFrame
+        - coords: Node coordinates DataFrame
+        - bounds: Map bounds for visualization
     """
+    # Select appropriate loader
+    loader: DataLoaderStrategy
 
-    self = obj
-
-    if self.input_type == "sqlite":
-        # connect to the database
-        conn = sqlite3.connect(os.path.join(self.input_dir, "result.sqlite"))
-        # print out all tables in the database
-        cursor = conn.cursor()
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
-        print(cursor.fetchall())
-
-        for table in self.tables:
-            # load the data as variable with the table name
-            setattr(self, table, h.extract_table_to_dataframe(conn, table))
-
-        # modify dataframes if needed
-        if "rp" in self.tables:
-            # region remove unnecessary index column in sets
-            self.rp.drop(columns=["index"], inplace=True)
-            self.rp.rename(columns={"0": "values"}, inplace=True)
-        if "k" in self.tables:
-            self.k.drop(columns=["index"], inplace=True)
-            self.k.rename(columns={"0": "values"}, inplace=True)
-        if "i" in self.tables:
-            self.i.drop(columns=["index"], inplace=True)
-            self.i.rename(columns={"0": "values"}, inplace=True)
-        if "g" in self.tables:
-            self.g.drop(columns=["index"], inplace=True)
-            self.g.rename(columns={"0": "values"}, inplace=True)
-        if "gi" in self.tables:
-            self.gi.drop(columns=["index"], inplace=True)
-            self.gi.rename(columns={"0": "g"}, inplace=True)
-            self.gi.rename(columns={"1": "i"}, inplace=True)
-        if "thermalGenerators" in self.tables:
-            self.thermalGenerators.drop(columns=["index"], inplace=True)
-            self.thermalGenerators.rename(columns={"0": "g"}, inplace=True)
-        if "rorGenerators" in self.tables:
-            self.rorGenerators.drop(columns=["index"], inplace=True)
-            self.rorGenerators.rename(columns={"0": "g"}, inplace=True)
-        if "vresGenerators" in self.tables:
-            self.vresGenerators.drop(columns=["index"], inplace=True)
-            self.vresGenerators.rename(columns={"0": "g"}, inplace=True)
-        if "storageUnits" in self.tables:
-            self.storageUnits.drop(columns=["index"], inplace=True)
-            self.storageUnits.rename(columns={"0": "g"}, inplace=True)
-        if "la" in self.tables:
-            self.la.drop(columns=["index"], inplace=True)
-            self.la.rename(columns={"0": "i"}, inplace=True)
-            self.la.rename(columns={"1": "j"}, inplace=True)
-            self.la.rename(columns={"2": "c"}, inplace=True)
-        if "pPmax" in self.tables:
-            self.pPmax.rename(columns={"level_0": "i"}, inplace=True)
-            self.pPmax.rename(columns={"level_1": "j"}, inplace=True)
-            self.pPmax.rename(columns={"level_2": "c"}, inplace=True)
-        if "vLineP" in self.tables:
-            self.vLineP.rename(columns={"level_0": "rp"}, inplace=True)
-            self.vLineP.rename(columns={"level_1": "k"}, inplace=True)
-            self.vLineP.rename(columns={"level_2": "i"}, inplace=True)
-            self.vLineP.rename(columns={"level_3": "j"}, inplace=True)
-            self.vLineP.rename(columns={"level_4": "c"}, inplace=True)
-            # Iterate over vLineP DataFrame
-            for row_idx, row in enumerate(self.vLineP.itertuples(index=True)):  # Keep index for modification
-                node_set = {row.i, row.j}  # Use set for order-independent comparison
-
-                # Iterate over self.la DataFrame to find the matching line
-                for idx, line in enumerate(self.la.itertuples(index=False)):
-                    if {line.i, line.j} == node_set:
-                        # Update the corresponding row in vLineP
-                        self.vLineP.at[row_idx, "line"] = str(int(idx))  # Use row index from enumerate
-                        break  # Stop searching once a match is found
-        if "vStIntraRes" in self.tables:
-            if not hasattr(self, "gi"):
-                raise ValueError("vStIntraRes table requires gi table to be loaded first.")
-            # add information about node attached to the storage unit
-            self.vStIntraRes = self.vStIntraRes.merge(self.gi, left_on='storageUnits', right_on='g', how='inner').drop(
-                columns=['g'])
-
-        # self.coords = h.load_lat_lon(self.input_dir)
-        self.coords = ExcelReader.get_dPower_BusInfo(os.path.join(self.input_dir, "Power_BusInfo.xlsx"), True, True)
-        ew = ExcelWriter("InOutModule/ExcelDefinitions.xml")
-        ew.write_dPower_BusInfo(self.coords, self.input_dir)
-        self.coords = self.coords[["lat", "lon"]]
-        self.coords["values"] = self.coords.index.astype(str)
-
-        # add tec to self.gi
-        tec = []
-        for generator in self.gi.itertuples(index=True):
-            # get the generator name
-            g = generator.g
-
-            if hasattr(self, "thermalGenerators") and g in self.thermalGenerators.values:
-                tec.append("thermal")
-            elif hasattr(self, "rorGenerators") and g in self.rorGenerators.values:
-                tec.append("RoR")
-            elif hasattr(self, "vresGenerators") and g in self.vresGenerators.values:
-                tec.append("vres")
-            elif hasattr(self, "storageUnits") and g in self.storageUnits.values:
-                tec.append("storage")
-            else:
-                tec.append("unknown")
-        self.gi["tec"] = tec
-
-        # close the connection
-        conn.close()
-
-    # Load LEGO data from Excel files
-    elif self.input_type == "excel":
-        for table in self.tables:
-            print(f"Loading table {table}...")
-            if table == "vLineP":
-                df, df_lines = h.extract_excel_to_dataframe(self.input_dir, table)
-                self.vLineP = df
-                self.la = df_lines
-            elif table == "vLineQ":
-                df, df_lines = h.extract_excel_to_dataframe(self.input_dir, table)
-                self.vLineQ = df
-            elif table == "gi":
-                df, df_g = h.extract_excel_to_dataframe(self.input_dir, table)
-                self.gi = df
-                self.g = df_g
-            elif table == "la" or table == "g":  # get from other dataframe
-                continue
-            else:
-                # Load the data as variable with the table name
-                setattr(self, table, h.extract_excel_to_dataframe(self.input_dir, table))
-        self.coords = h.extract_excel_to_dataframe(self.input_dir, "coords")
-
-        # Only take values where duplicate is False for vLineQ
-        if hasattr(self, "vLineQ"):
-            self.vLineQ = self.vLineQ[self.vLineQ["duplicate"] == False].copy()
-            self.vLineQ.drop(columns=["duplicate"], inplace=True)
-
-        # Only take values where duplicate is False
-        self.vLineP = self.vLineP[self.vLineP["duplicate"] == False].copy()
-        self.vLineP.drop(columns=["duplicate"], inplace=True)
-
-        if not hasattr(self, "gi"):
-            raise ValueError("vStIntraRes table requires gi table to be loaded first.")
-
-        # Add information about node attached to the storage unit
-        self.vStIntraRes = self.vStIntraRes.merge(self.gi, left_on='storageUnits', right_on='g', how='inner').drop(
-            columns=['g'])
-
-    elif self.input_type == "V2G":
-
-        # connect to the database
-        conn = sqlite3.connect(os.path.join(self.input_dir, "result.sqlite"))
-        # print out all tables in the database
-        cursor = conn.cursor()
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
-        # print(cursor.fetchall())
-
-        for table in self.tables:
-            print(f"Loading table {table}...")
-
-            if table == "vLineP":
-                table_name = "vP"
-            elif table == "la":
-                table_name = "Branches"
-            elif table == "i":
-                table_name = "Buses"
-            elif table == "pPmax":
-                table_name = "thermal_lim"
-            elif table == "k":
-                table_name = "Time"
-            else:
-                table_name = table
-            # load the data as variable with the table name
-            setattr(self, table, h.extract_table_to_dataframe(conn, table_name))
-
-            # merge self.lat and self.lon
-        buses = self.lat["Buses"].values.astype(str)
-        lat = self.lat["values"].values
-        lon = self.lon["values"].values
-        self.coords = pd.DataFrame({"values": buses, "lat": lat, "lon": lon})
-        # delete self.lat and self.long
-        del self.lat
-        del self.lon
-
-        # rename i columns
-        self.i.drop(columns=["index"], inplace=True)
-        self.i.rename(columns={"0": "values"}, inplace=True)
-        # make sure the values are strings
-        self.i["values"] = self.i["values"].astype(str)
-
-        # rename pPmax columns
-        self.pPmax.rename(columns={"level_0": "i"}, inplace=True)
-        self.pPmax.rename(columns={"level_1": "j"}, inplace=True)
-        # transform i and j to type str
-        self.pPmax["i"] = self.pPmax["i"].astype(str)
-        self.pPmax["j"] = self.pPmax["j"].astype(str)
-
-        # rename la columns
-        self.la.drop(columns=["index"], inplace=True)
-        self.la.rename(columns={"0": "i"}, inplace=True)
-        self.la.rename(columns={"1": "j"}, inplace=True)
-        # transform i and j to type str
-        self.la["i"] = self.la["i"].astype(str)
-        self.la["j"] = self.la["j"].astype(str)
-
-        # iterate over la and find lines based on set(i, j)
-        line_index_dict = {}  # frozenset(i,j) -> line index
-        line_list = []  # list of [i, j] in order
-        for row_idx, row in enumerate(self.la.itertuples(index=True)):  # Keep index for modification
-            ij_key = frozenset([row.i, row.j])
-
-            if ij_key not in line_index_dict:
-                line_index_dict[ij_key] = len(line_index_dict)
-                line_list.append([row.i, row.j])
-
-        # overwrite self.la with line_list df
-        self.la = pd.DataFrame(line_list, columns=["i", "j"])
-        # rename vLineP columns
-        self.vLineP.rename(columns={"level_0": "i"}, inplace=True)
-        self.vLineP.rename(columns={"level_1": "j"}, inplace=True)
-        self.vLineP.rename(columns={"level_2": "k"}, inplace=True)
-        # change the k column to k0001, k0002, ...
-        self.vLineP["k"] = self.vLineP["k"].apply(lambda x: f"k{int(x + 1):04d}")
-        # transform i and j to type str
-        self.vLineP["i"] = self.vLineP["i"].astype(str)
-        self.vLineP["j"] = self.vLineP["j"].astype(str)
-
-        # initialize "is_duplicate" column to vLineP
-        self.vLineP["duplicate"] = False
-
-        # iterate over vLineP and find lines based on set(i, j)
-        for row_idx, row in enumerate(self.vLineP.itertuples(index=True)):  # Keep index for modification
-            ij_key = frozenset([row.i, row.j])
-            line = line_index_dict[ij_key]
-            is_duplicate = [row.i, row.j] != line_list[line]
-            # Update the corresponding row in vLineP
-            self.vLineP.at[row_idx, "line"] = str(int(line))
-            self.vLineP.at[row_idx, "duplicate"] = is_duplicate
-
-        # reverse  the value of the flow if the line is duplicate
-        self.vLineP.loc[self.vLineP["duplicate"] == True, "values"] = -self.vLineP.loc[
-            self.vLineP["duplicate"] == True, "values"]
-        # always find the two rows with the same "line" and "k" and set their "values" to the mean of the two values
-        self.vLineP["values"] = self.vLineP.groupby(["line", "k"])["values"].transform(
-            lambda x: x.mean() if len(x) > 1 else x)
-        # drop all entries where the "duplicate" is True
-        self.vLineP = self.vLineP[self.vLineP["duplicate"] == False].copy()
-        # drop duplicate column
-        self.vLineP.drop(columns=["duplicate"], inplace=True)
-        # reset index
-        self.vLineP.reset_index(drop=True, inplace=True)
-
-        # iterate over pPmax and add drop duplicate lines
-        for row_idx, row in enumerate(self.pPmax.itertuples(index=True)):  # Keep index for modification
-            node_list = [row.i, row.j]
-            # check if the line is in the line_list
-            if node_list not in line_list:
-                # drop the line from pPmax
-                self.pPmax.drop(row_idx, inplace=True)
-        # reset index
-        self.pPmax.reset_index(drop=True, inplace=True)
-
-        # create gi dataframe
-        self.gi = pd.DataFrame(columns=["g", "i", "tec"])
-
-        # add PV generators
-        pv_generators = []
-        if hasattr(self, "PV_Buses"):
-            # rename the columns
-            self.PV_Buses.rename(columns={"0": "i"}, inplace=True)
-            # drop the index column
-            self.PV_Buses.drop(columns=["index"], inplace=True)
-            for row_idx, row in enumerate(self.PV_Buses.itertuples(index=True)):
-                # get the generator name
-                g = row.i + "_PV"
-                # get the bus name
-                i = row.i
-                # get tec
-                tec = "Solar"
-                # add to the list
-                pv_generators.append([g, i, tec])
-
-        # add wind generators
-        wind_generators = []
-        if hasattr(self, "Wind_Buses"):
-            # rename the columns
-            self.Wind_Buses.rename(columns={"0": "i"}, inplace=True)
-            # drop the index column
-            self.Wind_Buses.drop(columns=["index"], inplace=True)
-            for row_idx, row in enumerate(self.Wind_Buses.itertuples(index=True)):
-                # get the generator name
-                g = row.i + "_Wind"
-                # get the bus name
-                i = row.i
-                # get tec
-                tec = "Wind"
-                # add to the list
-                wind_generators.append([g, i, tec])
-        # add charging buses
-        charging_buses = []
-        if hasattr(self, "Charging_Buses"):
-            # rename the columns
-            self.Charging_Buses.rename(columns={"0": "i"}, inplace=True)
-            # drop the index column
-            self.Charging_Buses.drop(columns=["index"], inplace=True)
-            for row_idx, row in enumerate(self.Charging_Buses.itertuples(index=True)):
-                # get the generator name
-                g = row.i + "_Discharging"
-                # get the bus name
-                i = row.i
-                # get tec
-                tec = "V2G_discharging"
-                # add to the list
-                charging_buses.append([g, i, tec])
-
-        # put all the generators in one dataframe
-        if hasattr(self, "PV_Buses"):
-            self.gi = pd.concat([self.gi, pd.DataFrame(pv_generators, columns=["g", "i", "tec"])], ignore_index=True)
-        if hasattr(self, "Wind_Buses"):
-            self.gi = pd.concat([self.gi, pd.DataFrame(wind_generators, columns=["g", "i", "tec"])], ignore_index=True)
-        if hasattr(self, "Charging_Buses"):
-            self.gi = pd.concat([self.gi, pd.DataFrame(charging_buses, columns=["g", "i", "tec"])], ignore_index=True)
-
-        # add all the generation to the vGenP dataframe
-        self.vGenP = pd.DataFrame(columns=["k", "g", "values"]).astype({
-            "k": "str",  # or int, str, etc. — whatever matches your data
-            "g": "str",
-            "values": "float"})
-        pv_production = []
-        if hasattr(self, "vPV_production") and not self.vPV_production.empty:
-            for row_idx, row in enumerate(self.vPV_production.itertuples(index=True)):
-                # get the generator name
-                g = row.PV_Buses + "_PV"
-                # get the time
-                k = row.Time
-                # get the value
-                value = row.values
-
-                # add to the list
-                pv_production.append([k, g, value])
-
-        wind_production = []
-        if hasattr(self, "vWind_production") and not self.vWind_production.empty:
-            for row_idx, row in enumerate(self.vWind_production.itertuples(index=True)):
-                # get the generator name
-                g = row.Wind_Buses + "_Wind"
-                # get the time
-                k = row.Time
-                # get the value
-                value = row.values
-
-                # add to the list
-                wind_production.append([k, g, value])
-        charging_production = []
-        if hasattr(self, "vCharging_production") and not self.vCharging_production.empty:
-            for row_idx, row in enumerate(self.vCharging_production.itertuples(index=True)):
-                # get the generator name
-                g = row.Charging_Buses + "_Discharging"
-                # get the time
-                k = row.Time
-                # get the value
-                value = row.values
-
-                # add to the list
-                charging_production.append([k, g, value])
-        # put all the generators in one dataframe
-        if hasattr(self, "vPV_production") and not self.vPV_production.empty:
-            self.vGenP = pd.concat([self.vGenP, pd.DataFrame(pv_production, columns=["k", "g", "values"])],
-                                   ignore_index=True)
-        if hasattr(self, "vWind_production") and not self.vWind_production.empty:
-            self.vGenP = pd.concat([self.vGenP, pd.DataFrame(wind_production, columns=["k", "g", "values"])],
-                                   ignore_index=True)
-        if hasattr(self, "vCharging_production") and not self.vCharging_production.empty:
-            self.vGenP = pd.concat([self.vGenP, pd.DataFrame(charging_production, columns=["k", "g", "values"])],
-                                   ignore_index=True)
-        print(self.vWind_production)
-
-        self.vGenP["k"] = self.vGenP["k"].apply(lambda x: f"k{int(x + 1):04d}")
-
-        # close the connection
-        conn.close()
-
+    if obj.input_type == "sqlite":
+        loader = SQLiteDataLoader()
+    elif obj.input_type == "excel":
+        loader = ExcelDataLoader()
     else:
-        raise ValueError("Invalid input type. Please choose either 'excel', 'sqlite' or V2G.")
-
-    # Add the coordinates in coords to the i dataframe
-    self.i = pd.merge(self.i, self.coords, left_on="values", right_on="values", how="left")
-
-    # Add the voltage bounds to the i dataframe
-    if hasattr(self, "voltage_bounds"):
-        # self.voltage_bounds is already indexed by "values" from helper_functions
-        self.i = pd.merge(self.i, self.voltage_bounds, left_on="values", right_index=True, how="left")
-
-    # Add to every line in vLineP the value divided by pPmax
-    self.vLineP["rel_values"] = abs(self.vLineP["values"]) / self.vLineP["line_id"].map(
-        self.pPmax.set_index("line_id")["values"]
-    )
-    self.vLineP["pPmax"] = self.vLineP["line_id"].map(
-        self.pPmax.set_index("line_id")["values"]
-    )
-
-    # Add to every line in vLineQ the value divided by pPmax
-    if hasattr(self, "vLineQ"):
-        self.vLineQ["rel_values"] = abs(self.vLineQ["values"]) / self.vLineQ["line_id"].map(
-            self.pPmax.set_index("line_id")["values"]
-        )
-        self.vLineQ["pPmax"] = self.vLineQ["line_id"].map(
-            self.pPmax.set_index("line_id")["values"]
+        raise ValueError(
+            f"Invalid input type: {obj.input_type}. "
+            "Please choose either 'sqlite' or 'excel'."
         )
 
-    # Compute bounds for map display
-    self.bounds = [
-        [min(self.i['lat']), min(self.i['lon'])],
-        [max(self.i['lat']), max(self.i['lon'])]
-    ]
+    # Load data
+    data = loader.load(obj.input_dir, obj.tables)
+
+    # Transfer data to object attributes
+    _transfer_data_to_object(obj, data)
+
+    # Post-processing
+    _postprocess_data(obj)
+
+
+def _transfer_data_to_object(obj, data: LEGOData) -> None:
+    """Transfer data from LEGOData container to object attributes."""
+    # Sets
+    if not data.i.empty:
+        obj.i = data.i
+    if not data.k.empty:
+        obj.k = data.k
+    if not data.rp.empty:
+        obj.rp = data.rp
+    if not data.g.empty:
+        obj.g = data.g
+    if not data.la.empty:
+        obj.la = data.la
+    if not data.gi.empty:
+        obj.gi = data.gi
+
+    # Variables
+    if not data.vLineP.empty:
+        obj.vLineP = data.vLineP
+    if data.vLineQ is not None and not data.vLineQ.empty:
+        obj.vLineQ = data.vLineQ
+    if not data.vGenP.empty:
+        obj.vGenP = data.vGenP
+    if data.vSOCP_cii is not None and not data.vSOCP_cii.empty:
+        obj.vSOCP_cii = data.vSOCP_cii
+    if data.vStIntraRes is not None and not data.vStIntraRes.empty:
+        obj.vStIntraRes = data.vStIntraRes
+
+    # Parameters
+    if not data.pPmax.empty:
+        obj.pPmax = data.pPmax
+    if not data.coords.empty:
+        obj.coords = data.coords
+    if data.voltage_bounds is not None and not data.voltage_bounds.empty:
+        obj.voltage_bounds = data.voltage_bounds
+
+
+def _postprocess_data(obj) -> None:
+    """Apply common post-processing to loaded data."""
+
+    # Merge coordinates into node info
+    if hasattr(obj, "i") and hasattr(obj, "coords"):
+        obj.i = pd.merge(
+            obj.i,
+            obj.coords,
+            left_on="values",
+            right_on="values",
+            how="left"
+        )
+
+    # Add voltage bounds to node info
+    if hasattr(obj, "voltage_bounds") and obj.voltage_bounds is not None:
+        obj.i = pd.merge(
+            obj.i,
+            obj.voltage_bounds,
+            left_on="values",
+            right_index=True,
+            how="left"
+        )
+
+    # Set node index to 'values' for easier lookup
+    if hasattr(obj, "i") and "values" in obj.i.columns:
+        obj.i.set_index("values", inplace=True)
+
+    # Compute relative line flow values
+    if hasattr(obj, "vLineP") and hasattr(obj, "pPmax"):
+        _add_relative_line_values(obj.vLineP, obj.pPmax)
+
+    if hasattr(obj, "vLineQ") and obj.vLineQ is not None and hasattr(obj, "pPmax"):
+        _add_relative_line_values(obj.vLineQ, obj.pPmax)
+
+    # Compute map bounds
+    if hasattr(obj, "i") and "lat" in obj.i.columns and "lon" in obj.i.columns:
+        obj.bounds = [
+            [obj.i["lat"].min(), obj.i["lon"].min()],
+            [obj.i["lat"].max(), obj.i["lon"].max()]
+        ]
+
+
+def _add_relative_line_values(vline_df: pd.DataFrame, ppmax_df: pd.DataFrame) -> None:
+    """Add relative values and pPmax to line flow dataframe."""
+    ppmax_map = ppmax_df.set_index("line_id")["values"]
+
+    vline_df["rel_values"] = abs(vline_df["values"]) / vline_df["line_id"].map(ppmax_map)
+    vline_df["pPmax"] = vline_df["line_id"].map(ppmax_map)
