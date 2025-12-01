@@ -9,8 +9,10 @@ and maintainability.
 from typing import TYPE_CHECKING, Callable
 
 import dash
-from dash import Input, Output, ctx
+from dash import Input, Output, State, ctx
 from dash.exceptions import PreventUpdate
+
+from layout_builder import Colors
 
 if TYPE_CHECKING:
     from data_provider import DataProvider
@@ -66,6 +68,7 @@ class CallbackManager:
         self._register_zoom_store_callback()
         self._register_node_search_zoom_callback()
         self._register_plot_update_callback()
+        self._register_plot_panel_toggle_callback()
 
     # =========================================================================
     # Network Map Callbacks
@@ -92,12 +95,16 @@ class CallbackManager:
                 selected_time: int,
                 zoom_level: int,
                 viewport: dict,
-                pq_mode: str
+                pq_button_label: str
         ):
             """Update the network map visualization."""
             # Get zoom from viewport if available
             if viewport and 'zoom' in viewport:
                 zoom_level = viewport['zoom']
+
+            # Convert button label to mode
+            # Button shows "P" or "Q", convert to "vLineP" or "vLineQ"
+            pq_mode = "vLineP" if pq_button_label == "P" else "vLineQ"
 
             # Call the network map handler
             handler = self.handlers.get('network_map')
@@ -213,10 +220,10 @@ class CallbackManager:
             Input("pq-toggle-button", "n_clicks")
         )
         def toggle_pq_label(n_clicks: int) -> str:
-            """Toggle between vLineP and vLineQ display."""
+            """Toggle between P (Active) and Q (Reactive) power display."""
             if n_clicks % 2 == 0:
-                return "vLineP"
-            return "vLineQ"
+                return "P"
+            return "Q"
 
     # =========================================================================
     # Map Control Callbacks
@@ -253,6 +260,71 @@ class CallbackManager:
             return dash.no_update
 
     # =========================================================================
+    # Plot Panel Callbacks
+    # =========================================================================
+
+    def _register_plot_panel_toggle_callback(self) -> None:
+        """Register callback for toggling the plot panel visibility."""
+
+        @self.app.callback(
+            [
+                Output("plot-panel", "style"),
+                Output("plot-panel-visible", "data"),
+                Output("toggle-plot-panel", "style"),
+            ],
+            [
+                Input("toggle-plot-panel", "n_clicks"),
+                Input("close-plot-panel", "n_clicks"),
+                Input("last-clicked-node", "data"),
+            ],
+            [
+                State("plot-panel-visible", "data"),
+                State("plot-panel", "style"),
+                State("toggle-plot-panel", "style"),
+            ],
+            prevent_initial_call=True
+        )
+        def toggle_plot_panel(
+                toggle_clicks: int,
+                close_clicks: int,
+                last_node: str,
+                is_visible: bool,
+                panel_style: dict,
+                button_style: dict
+        ):
+            """Toggle the plot panel visibility with slide animation."""
+            if not ctx.triggered:
+                raise PreventUpdate
+
+            triggered_id = ctx.triggered[0]['prop_id'].split('.')[0]
+
+            # Determine new visibility state
+            if triggered_id == "toggle-plot-panel":
+                new_visible = not is_visible
+            elif triggered_id == "close-plot-panel":
+                new_visible = False
+            elif triggered_id == "last-clicked-node":
+                new_visible = True
+            else:
+                raise PreventUpdate
+
+            # Update panel style
+            new_panel_style = panel_style.copy() if panel_style else {}
+            if new_visible:
+                new_panel_style["transform"] = "translateX(0)"
+            else:
+                new_panel_style["transform"] = "translateX(100%)"
+
+            # Update button style to show active state
+            new_button_style = button_style.copy() if button_style else {}
+            if new_visible:
+                new_button_style["backgroundColor"] = "#226885"  # Darker when active
+            else:
+                new_button_style["backgroundColor"] = Colors.ACCENT  # Normal color
+
+            return new_panel_style, new_visible, new_button_style
+
+    # =========================================================================
     # Plot Update Callback
     # =========================================================================
 
@@ -260,7 +332,7 @@ class CallbackManager:
         """Register callback for updating the dynamic plot."""
 
         @self.app.callback(
-            Output("dynamic-plot-container", "children"),
+            Output("dynamic-plot", "figure"),
             [
                 Input("x-axis-dropdown", "value"),
                 Input("y-axis-dropdown", "value"),
@@ -299,7 +371,7 @@ class CallbackManager:
                     time_range=time_range
                 )
 
-            return None
+            return {}
 
 
 class CallbackRegistry:
