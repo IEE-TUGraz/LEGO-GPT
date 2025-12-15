@@ -11,7 +11,6 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Optional
 
-import numpy as np
 import pandas as pd
 
 import helper_functions as h
@@ -184,7 +183,7 @@ class SQLiteDataLoader(DataLoaderStrategy):
         return df
 
     @staticmethod
-    def _load_lines( conn: sqlite3.Connection) -> pd.DataFrame:
+    def _load_lines(conn: sqlite3.Connection) -> pd.DataFrame:
         """Load line set (la) and standardize column names."""
         df = pd.read_sql_query("SELECT * FROM la", conn)
 
@@ -438,65 +437,66 @@ class SQLiteDataLoader(DataLoaderStrategy):
 
         return df
 
-    def _load_coords(
-            self,
-            conn: sqlite3.Connection,
-            i_df: pd.DataFrame) -> pd.DataFrame:
+    @staticmethod
+    def _load_coords(conn: sqlite3.Connection) -> pd.DataFrame:
         """
-        Load node coordinates.
+        Load node coordinates from 'coordsLat' and 'coordsLon' tables.
 
-        Tries to load from 'coords' table if it exists, otherwise creates dummy coordinates.
+        Raises:
+            ValueError: If tables are missing, malformed, or cannot be merged.
         """
         try:
-            df = pd.read_sql_query("SELECT * FROM coords", conn)
+            # 1. Load the raw tables
+            df_lat = pd.read_sql_query("SELECT * FROM coordsLat", conn)
+            df_lon = pd.read_sql_query("SELECT * FROM coordsLon", conn)
 
-            # Expected columns: values (node name), lat, lon
-            if "values" not in df.columns:
-                # Try to rename common patterns
+            # 2. Helper to standardize columns (Node ID -> 'values', Coord -> 'lat'/'lon')
+            def standardize_table(df, coord_name):
+                # Remove generic index if present
+                if "index" in df.columns:
+                    df = df.drop(columns=["index"])
+
+                # Identify the Node ID column (usually 'i' or '0')
+                node_col = None
                 if "i" in df.columns:
-                    df = df.rename(columns={"i": "values"})
+                    node_col = "i"
                 elif "0" in df.columns:
-                    df = df.rename(columns={"0": "values"})
+                    node_col = "0"
+                else:
+                    # Fallback: assume the first column is the ID if 'i' isn't found
+                    node_col = df.columns[0]
 
-            df["values"] = df["values"].astype(str)
-            return df
+                # Identify the Value column (usually 'values', '1', or the remaining column)
+                # We assume the column that isn't the node_col is the data
+                value_cols = [c for c in df.columns if c != node_col]
+                if not value_cols:
+                    raise ValueError(f"Could not identify coordinate value column in {coord_name} table")
+                val_col = value_cols[0]
 
-        except Exception:
-            # Create dummy coordinates for visualization
-            print("Warning: 'coords' table not found. Creating dummy coordinates.")
-            return self._create_dummy_coords(i_df)
+                # Rename and cast
+                df = df.rename(columns={node_col: "values", val_col: coord_name})
+                df["values"] = df["values"].astype(str)
 
-    @staticmethod
-    def _create_dummy_coords(i_df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Create dummy coordinates arranged in a grid pattern.
+                return df[["values", coord_name]]
 
-        Args:
-            i_df: Nodes dataframe with 'values' column.
+            # 3. Process both dataframes
+            df_lat = standardize_table(df_lat, "lat")
+            df_lon = standardize_table(df_lon, "lon")
 
-        Returns:
-            DataFrame with columns: values, lat, lon
-        """
-        n_nodes = len(i_df)
-        grid_size = int(np.ceil(np.sqrt(n_nodes)))
+            # 4. Merge on the node identifier ('values')
+            df_coords = pd.merge(df_lat, df_lon, on="values", how="inner")
 
-        coords_data = []
-        for idx, row in i_df.iterrows():
-            # Arrange nodes in a grid
-            grid_row = idx // grid_size
-            grid_col = idx % grid_size
+            # 5. Validation
+            if df_coords.empty:
+                raise ValueError("Resulting coordinates table is empty after merge.")
 
-            # Use arbitrary lat/lon starting point (can be configured)
-            lat = 47.0 + grid_row * 0.01  # ~1km spacing
-            lon = 15.0 + grid_col * 0.01
+            return df_coords
 
-            coords_data.append({
-                "values": str(row["values"]),
-                "lat": lat,
-                "lon": lon
-            })
-
-        return pd.DataFrame(coords_data)
+        except Exception as e:
+            raise ValueError(
+                f"Error loading coordinates: {e}. "
+                "Ensure 'coordsLat' and 'coordsLon' tables exist and contain matching node IDs."
+            )
 
     @staticmethod
     def _load_voltage_bounds(conn: sqlite3.Connection) -> pd.DataFrame:
