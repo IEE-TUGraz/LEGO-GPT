@@ -42,8 +42,15 @@ class MarkerJS:
             min_radius (Any): The minimum radius for pie charts, extracted from the 
                 map_options dictionary.
         """
+        # Handle empty or zero generation data to avoid divide by zero
+        if vGenP.empty or 'values' not in vGenP.columns:
+            mean_val = 1.0  # Default fallback
+        else:
+            mean_val = np.sqrt(vGenP['values']).mean()
+            if mean_val == 0 or np.isnan(mean_val) or np.isinf(mean_val):
+                mean_val = 1.0  # Fallback if mean is zero, NaN, or inf
 
-        self.scale_factor = 1 / (np.sqrt(vGenP['values']).mean())
+        self.scale_factor = 1.0 / mean_val
         self.min_radius = map_options["pie_chart_min_radius"]
         self.max_radius = map_options["pie_chart_max_radius"]
 
@@ -52,32 +59,32 @@ class MarkerJS:
         """
         Generates an SVG representation of a pie chart using JavaScript.
 
-        The `pie_svg` method returns a JavaScript function as a string. This function, `pieSVG`, 
-        creates an SVG pie chart based on the provided options. It calculates the necessary 
-        coordinates and angles for each slice of the pie chart and generates the corresponding 
+        The `pie_svg` method returns a JavaScript function as a string. This function, `pieSVG`,
+        creates an SVG pie chart based on the provided options. It calculates the necessary
+        coordinates and angles for each slice of the pie chart and generates the corresponding
         SVG path elements.
         Returns:
             str: A JavaScript function as a string that generates an SVG pie chart.
         JavaScript Function Details:
-            - `getCoords(cx, cy, radius, angle)`: Calculates the x and y coordinates for a 
+            - `getCoords(cx, cy, radius, angle)`: Calculates the x and y coordinates for a
             point on a circle given its center, radius, and angle.
-            - `describeSlice(cx, cy, r, startAngle, endAngle, isFullCircle)`: Generates the 
+            - `describeSlice(cx, cy, r, startAngle, endAngle, isFullCircle)`: Generates the
             SVG path description for a pie slice or a full circle.
-            - `pieSVG(opt)`: Main function that generates the SVG pie chart. Accepts an options 
+            - `pieSVG(opt)`: Main function that generates the SVG pie chart. Accepts an options
             object (`opt`) with the following properties:
                 - `width` (int): Width of the SVG canvas (default: 60).
                 - `height` (int): Height of the SVG canvas (default: 60).
                 - `radius` (int): Radius of the pie chart (default: 20).
                 - `fontSize` (int): Font size for labels (default: 14).
-                - `values` (list): List of numerical values representing the pie slices 
+                - `values` (list): List of numerical values representing the pie slices
                 (default: [10, 10, 10]).
                 - `colors` (list): List of colors for the pie slices (default: ['green', 'orange', 'red']).
         Behavior:
             - If the sum of `values` is 0, a placeholder full circle is drawn.
-            - Otherwise, the function calculates the angles for each slice based on the 
+            - Otherwise, the function calculates the angles for each slice based on the
             proportions of the `values` array and generates the corresponding SVG paths.
         Example Usage:
-            The returned JavaScript function can be embedded in an HTML file or executed in a 
+            The returned JavaScript function can be embedded in an HTML file or executed in a
             JavaScript environment to generate a pie chart SVG.
             """
 
@@ -152,23 +159,23 @@ class MarkerJS:
         """
         Creates a Leaflet marker with a custom pie chart icon and permanent node label.
 
-        This method generates a JavaScript function that defines how GeoJSON points 
-        are converted into Leaflet markers. Each marker is represented by a pie chart 
-        icon with a permanent text label below it, which is dynamically created based 
+        This method generates a JavaScript function that defines how GeoJSON points
+        are converted into Leaflet markers. Each marker is represented by a pie chart
+        icon with a permanent text label below it, which is dynamically created based
         on the feature's properties.
 
         Returns:
-            str: A JavaScript function as a string that defines the point-to-layer 
+            str: A JavaScript function as a string that defines the point-to-layer
             behavior for Leaflet.
 
         The generated JavaScript function performs the following:
         - Extracts `values`, `colors`, and `labels` from the feature's properties.
-        - Calculates the total of the `values` array and determines the radius of 
+        - Calculates the total of the `values` array and determines the radius of
           the pie chart based on the total and scaling factors.
-        - Creates a custom Leaflet `divIcon` using the `pieSVG` function to render 
+        - Creates a custom Leaflet `divIcon` using the `pieSVG` function to render
           the pie chart.
         - Configures the icon's size and anchor point based on the calculated radius.
-        - Creates a Leaflet marker at the given latitude and longitude (`latlng`) 
+        - Creates a Leaflet marker at the given latitude and longitude (`latlng`)
           with the custom icon.
         - Binds a permanent tooltip showing the node name and voltage.
         - Binds a hover-activated popup with detailed information, including
@@ -260,8 +267,8 @@ class MarkerJS:
         Generates a JavaScript function to create a custom Leaflet marker cluster layer.
 
         This method constructs a JavaScript function that defines how to render a cluster
-        of markers on a Leaflet map. It uses pie chart SVGs to visually represent the 
-        aggregated data within each cluster. The function is returned as a string and 
+        of markers on a Leaflet map. It uses pie chart SVGs to visually represent the
+        aggregated data within each cluster. The function is returned as a string and
         can be used in a JavaScript context.
 
         Returns:
