@@ -159,10 +159,14 @@ class CallbackManager:
 
             if triggered_id == "node-search-dropdown" and search_value:
                 return search_value
+
             elif triggered_id == "node-layer" and click_data:
-                clicked_id = click_data["properties"]["id"]
-                print(f"Clicked node: {clicked_id}")
-                return clicked_id
+                props = click_data.get("properties", {})
+                clicked_id = props.get("name", props.get("id"))
+
+                if clicked_id:
+                    print(f"Clicked node: {clicked_id}")
+                    return clicked_id
 
             return dash.no_update
 

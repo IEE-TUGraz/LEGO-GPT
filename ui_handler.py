@@ -220,16 +220,59 @@ class NetworkMapGenerator:
     ) -> dl.GeoJSON:
         """Generate the node layer with pie charts."""
         buses = self._data.i
-        gi = self._data.gi
+        gi = getattr(self._data, 'gi', pd.DataFrame())
 
-        # Merge generation data with generator info
-        merged = pd.merge(vgenp_filtered, gi, on="g", how="left")
-        grouped = merged.groupby(["i", "tec"])["values"].sum().reset_index()
-        pivoted = grouped.pivot(index="i", columns="tec", values="values").fillna(0)
-        pivoted.reset_index(inplace=True)
+        # Handle case where there's no generation data OR no gi mapping
+        if vgenp_filtered.empty or gi.empty:
+            print("  [Node Layer] No generation data or gi mapping - showing all buses with 'No Generation'")
+            # Create empty pivoted dataframe with all buses
+            pivoted = pd.DataFrame({'i': buses.index.tolist()})
+            pivoted = pivoted.merge(
+                buses.reset_index(),
+                left_on="i",
+                right_on="values",
+                how="left"
+            )
+        else:
+            # Merge generation data with generator info
+            merged = pd.merge(vgenp_filtered, gi, on="g", how="left")
 
-        # Merge with bus info
-        pivoted = pivoted.merge(buses.reset_index(), left_on="i", right_on="values", how="left")
+            # Drop rows where merge failed (generators not in gi)
+            merged = merged.dropna(subset=['i', 'tec'])
+
+            if merged.empty:
+                print("  [Node Layer] Merge resulted in empty data - showing all buses")
+                pivoted = pd.DataFrame({'i': buses.index.tolist()})
+                pivoted = pivoted.merge(
+                    buses.reset_index(),
+                    left_on="i",
+                    right_on="values",
+                    how="left"
+                )
+            else:
+                grouped = merged.groupby(["i", "tec"])["values"].sum().reset_index()
+
+                # Handle empty grouped data
+                if grouped.empty:
+                    print("  [Node Layer] Grouping resulted in empty data")
+                    pivoted = pd.DataFrame({'i': buses.index.tolist()})
+                    pivoted = pivoted.merge(
+                        buses.reset_index(),
+                        left_on="i",
+                        right_on="values",
+                        how="left"
+                    )
+                else:
+                    pivoted = grouped.pivot(index="i", columns="tec", values="values").fillna(0)
+                    pivoted.reset_index(inplace=True)
+
+                    # Merge with bus info
+                    pivoted = pivoted.merge(
+                        buses.reset_index(),
+                        left_on="i",
+                        right_on="values",
+                        how="left"
+                    )
 
         # Handle missing buses
         pivoted = self._add_missing_buses(pivoted, buses)
@@ -246,6 +289,8 @@ class NetworkMapGenerator:
 
         # Prepare GeoJSON data
         geo_data = self._prepare_geo_data(pivoted)
+
+        print(f"  [Node Layer] Generated {len(geo_data)} geo points from {len(pivoted)} pivoted rows")
 
         geojson = dlx.dicts_to_geojson(geo_data)
         geobuf = dlx.geojson_to_geobuf(geojson)
@@ -278,12 +323,15 @@ class NetworkMapGenerator:
         for bus in missing_buses:
             new_row = {
                 "i": bus,
-                "lat": buses.loc[bus, "lat"],
-                "lon": buses.loc[bus, "lon"],
+                "lat": buses.loc[bus, "lat"] if "lat" in buses.columns else pd.NA,
+                "lon": buses.loc[bus, "lon"] if "lon" in buses.columns else pd.NA,
                 "pBusMaxV": buses.loc[bus, "pBusMaxV"] if "pBusMaxV" in buses.columns else pd.NA,
                 "pBusMinV": buses.loc[bus, "pBusMinV"] if "pBusMinV" in buses.columns else pd.NA
             }
             new_rows.append(new_row)
+
+        if new_rows:
+            print(f"  [Node Layer] Adding {len(new_rows)} missing buses")
 
         return pd.concat([pivoted, pd.DataFrame(new_rows)], ignore_index=True)
 
@@ -299,9 +347,15 @@ class NetworkMapGenerator:
         skip_cols = {"i", "lat", "lon", "values", "voltage_level", "pBusMaxV", "pBusMinV"}
 
         geo_data = []
+        skipped_count = 0
 
-        for _, row in pivoted.iterrows():
+        for idx, row in pivoted.iterrows():
+            # Debug logging for first few rows
+            if idx < 3:
+                print(f"  [GeoData] Row {idx}: i={row.get('i')}, lat={row.get('lat')}, lon={row.get('lon')}")
+
             if pd.isna(row.get("lat")) or pd.isna(row.get("lon")):
+                skipped_count += 1
                 continue
 
             values = []
@@ -341,6 +395,9 @@ class NetworkMapGenerator:
                 "voltage_max": row.get("pBusMaxV", "N/A"),
                 "voltage_min": row.get("pBusMinV", "N/A")
             })
+
+        if skipped_count > 0:
+            print(f"  [GeoData] WARNING: Skipped {skipped_count} rows due to missing lat/lon")
 
         return geo_data
 
