@@ -93,7 +93,7 @@ class SQLiteDataLoader(DataLoaderStrategy):
 
     def load(self, input_dir: str, tables: list[str]) -> LEGOData:
         """
-        Load data from a SQLite database.
+        Load data from a SQLite database with progress tracking.
 
         Args:
             input_dir: Path to the directory containing result.sqlite or model.sqlite.
@@ -102,13 +102,16 @@ class SQLiteDataLoader(DataLoaderStrategy):
         Returns:
             LEGOData container with all loaded data.
         """
+        print(f"--- Starting SQLite Data Load ---")
         data = LEGOData()
 
         # Determine SQLite file path
         db_path = self._find_database(input_dir)
+        print(f"Database found: {db_path}")
 
         with sqlite3.connect(db_path) as conn:
             # Load sets
+            print("Loading Sets (i, k, rp, g, la)...")
             if "i" in tables:
                 data.i = self._load_set(conn, "i")
             if "k" in tables:
@@ -122,32 +125,44 @@ class SQLiteDataLoader(DataLoaderStrategy):
 
             # Load generator-node mapping with technology
             if "gi" in tables:
+                print("Loading Generator Mappings (gi)...")
                 data.gi = self._load_gi(conn)
 
             # Load variables
+            print("Loading Variables (this may take time)...")
             if "vLineP" in tables:
+                print("  -> Loading vLineP...")
                 data.vLineP = self._load_vline(conn, "vLineP", data.la)
             if "vLineQ" in tables:
+                print("  -> Loading vLineQ...")
                 data.vLineQ = self._load_vline(conn, "vLineQ", data.la)
             if "vGenP" in tables:
+                print("  -> Loading vGenP...")
                 data.vGenP = self._load_vgenp(conn)
             if "vSOCP_cii" in tables:
+                print("  -> Loading vSOCP_cii...")
                 data.vSOCP_cii = self._load_vsocp_cii(conn)
             if "vStIntraRes" in tables:
+                print("  -> Loading vStIntraRes...")
                 data.vStIntraRes = self._load_vstintrares(conn, data.gi)
 
             # Load parameters
+            print("Loading Parameters...")
             if "pPmax" in tables:
+                print("  -> Loading pPmax...")
                 data.pPmax = self._load_ppmax(conn, data.la)
 
-            # Load coordinates (try coords table, otherwise create dummy)
+            # Load coordinates
             if "coords" in tables:
+                print("Loading Coordinates...")
                 data.coords = self._load_coords(conn, data.i)
 
             # Load voltage bounds
             if "voltage_bounds" in tables:
+                print("Loading Voltage Bounds...")
                 data.voltage_bounds = self._load_voltage_bounds(conn)
 
+        print("--- SQLite Data Load Complete ---")
         return data
 
     @staticmethod
@@ -243,12 +258,7 @@ class SQLiteDataLoader(DataLoaderStrategy):
 
         return "unknown"
 
-    def _load_vline(
-            self,
-            conn: sqlite3.Connection,
-            table_name: str,
-            la: pd.DataFrame
-    ) -> pd.DataFrame:
+    def _load_vline(self, conn: sqlite3.Connection, table_name: str, la: pd.DataFrame) -> pd.DataFrame:
         """
         Load line flow variable (vLineP or vLineQ) and process duplicates.
 
@@ -264,11 +274,8 @@ class SQLiteDataLoader(DataLoaderStrategy):
 
         # Rename columns from level_X format
         rename_map = {
-            "level_0": "rp",
-            "level_1": "k",
-            "level_2": "i",
-            "level_3": "j",
-            "level_4": "c"
+            "level_0": "rp", "level_1": "k", "level_2": "i",
+            "level_3": "j", "level_4": "c"
         }
         df = df.rename(columns=rename_map)
 
@@ -282,15 +289,8 @@ class SQLiteDataLoader(DataLoaderStrategy):
         # Generate unique line index (direction-insensitive)
         line_index_dict = self._build_line_index(la)
 
-        # Map each row to its line index and detect duplicates
-        df["line"] = df.apply(
-            lambda row: self._get_line_index(row, line_index_dict),
-            axis=1
-        )
-        df["duplicate"] = df.apply(
-            lambda row: self._is_duplicate(row, la, line_index_dict),
-            axis=1
-        )
+        df["line"] = df.apply(lambda row: self._get_line_index(row, line_index_dict), axis=1)
+        df["duplicate"] = df.apply(lambda row: self._is_duplicate(row, la, line_index_dict), axis=1)
 
         # Reverse flow values for duplicate (reverse direction) entries
         df.loc[df["duplicate"], "values"] *= -1
@@ -327,10 +327,7 @@ class SQLiteDataLoader(DataLoaderStrategy):
         return line_index_dict.get(key, -1)
 
     @staticmethod
-    def _is_duplicate(
-            row: pd.Series,
-            la: pd.DataFrame,
-            line_index_dict: dict) -> bool:
+    def _is_duplicate(row: pd.Series, la: pd.DataFrame, line_index_dict: dict) -> bool:
         """Check if row is a duplicate (reverse direction) entry."""
         key = frozenset([str(row["i"]), str(row["j"])])
         line_idx = line_index_dict.get(key, -1)
@@ -387,27 +384,13 @@ class SQLiteDataLoader(DataLoaderStrategy):
         for col in required_cols:
             if col not in df.columns:
                 raise ValueError(f"vStIntraRes missing required column: {col}")
-
-        # Add node information from gi
-        df = df.merge(
-            gi[["g", "i"]],
-            left_on="storageUnits",
-            right_on="g",
-            how="left"
-        ).drop(columns=["g"])
-
+        df = df.merge(gi[["g", "i"]], left_on="storageUnits", right_on="g", how="left").drop(columns=["g"])
         return df
 
     def _load_ppmax(self, conn: sqlite3.Connection, la: pd.DataFrame) -> pd.DataFrame:
         """Load line capacity parameter (pPmax)."""
         df = pd.read_sql_query("SELECT * FROM pPmax", conn)
-
-        # Rename columns from level_X format
-        rename_map = {
-            "level_0": "i",
-            "level_1": "j",
-            "level_2": "c"
-        }
+        rename_map = {"level_0": "i", "level_1": "j", "level_2": "c"}
         df = df.rename(columns=rename_map)
 
         # Ensure string types
@@ -419,20 +402,8 @@ class SQLiteDataLoader(DataLoaderStrategy):
 
         # Build line index
         line_index_dict = self._build_line_index(la)
-
-        # Map to line indices
-        df["line"] = df.apply(
-            lambda row: self._get_line_index(row, line_index_dict),
-            axis=1
-        )
-
-        # Average values for duplicate lines (same line, different directions)
-        df = (
-            df.groupby("line_id", as_index=False)
-            .agg({"values": "mean", "line": "first"})
-        )
-
-        # Convert line to string for consistency
+        df["line"] = df.apply(lambda row: self._get_line_index(row, line_index_dict), axis=1)
+        df = df.groupby("line_id", as_index=False).agg({"values": "mean", "line": "first"})
         df["line"] = df["line"].astype(str)
 
         return df
@@ -683,10 +654,12 @@ def _transfer_data_to_object(obj, data: LEGOData) -> None:
 
 
 def _postprocess_data(obj) -> None:
-    """Apply common post-processing to loaded data."""
+    """Apply common post-processing to loaded data with progress logging."""
+    print("Starting Post-processing...")
 
     # Merge coordinates into node info
     if hasattr(obj, "i") and hasattr(obj, "coords"):
+        print("  -> Merging coordinates...")
         obj.i = pd.merge(
             obj.i,
             obj.coords,
@@ -697,6 +670,7 @@ def _postprocess_data(obj) -> None:
 
     # Add voltage bounds to node info
     if hasattr(obj, "voltage_bounds") and obj.voltage_bounds is not None:
+        print("  -> Merging voltage bounds...")
         obj.i = pd.merge(
             obj.i,
             obj.voltage_bounds,
@@ -710,6 +684,7 @@ def _postprocess_data(obj) -> None:
         obj.i.set_index("values", inplace=True)
 
     # Compute relative line flow values
+    print("  -> Computing relative line flows...")
     if hasattr(obj, "vLineP") and hasattr(obj, "pPmax"):
         _add_relative_line_values(obj.vLineP, obj.pPmax)
 
@@ -722,6 +697,8 @@ def _postprocess_data(obj) -> None:
             [obj.i["lat"].min(), obj.i["lon"].min()],
             [obj.i["lat"].max(), obj.i["lon"].max()]
         ]
+
+    print("--- Post-processing Complete ---")
 
 
 def _add_relative_line_values(vline_df: pd.DataFrame, ppmax_df: pd.DataFrame) -> None:
