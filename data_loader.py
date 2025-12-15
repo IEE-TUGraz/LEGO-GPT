@@ -155,7 +155,7 @@ class SQLiteDataLoader(DataLoaderStrategy):
             # Load coordinates
             if "coords" in tables:
                 print("Loading Coordinates...")
-                data.coords = self._load_coords(conn, data.i)
+                data.coords = self._load_coords(conn)
 
             # Load voltage bounds
             if "voltage_bounds" in tables:
@@ -258,9 +258,11 @@ class SQLiteDataLoader(DataLoaderStrategy):
 
         return "unknown"
 
-    def _load_vline(self, conn: sqlite3.Connection, table_name: str, la: pd.DataFrame) -> pd.DataFrame:
+    @staticmethod
+    def _load_vline(conn: sqlite3.Connection, table_name: str, la: pd.DataFrame) -> pd.DataFrame:
         """
-        Load line flow variable (vLineP or vLineQ) and process duplicates.
+        Load line flow variable (vLineP or vLineQ) using vectorized operations.
+        Handles parallel lines by mapping to the first occurrence.
 
         Args:
             conn: Database connection.
@@ -272,71 +274,54 @@ class SQLiteDataLoader(DataLoaderStrategy):
         """
         df = pd.read_sql_query(f"SELECT * FROM {table_name}", conn)
 
-        # Rename columns from level_X format
         rename_map = {
             "level_0": "rp", "level_1": "k", "level_2": "i",
             "level_3": "j", "level_4": "c"
         }
         df = df.rename(columns=rename_map)
 
-        # Ensure string types for node columns
+        # Ensure string types
         df["i"] = df["i"].astype(str)
         df["j"] = df["j"].astype(str)
 
-        # Add canonical line identifier for safe merging
+        # 1. Add canonical IDs
         df = h.add_canonical_line_ids(df, "i", "j")
 
-        # Generate unique line index (direction-insensitive)
-        line_index_dict = self._build_line_index(la)
+        # 2. Prepare reference Lines (la) data
+        la_ref = la.copy()
+        la_ref = h.add_canonical_line_ids(la_ref, "i", "j")
+        la_ref = la_ref.reset_index(drop=True)
+        la_ref['line_index'] = la_ref.index
 
-        df["line"] = df.apply(lambda row: self._get_line_index(row, line_index_dict), axis=1)
-        df["duplicate"] = df.apply(lambda row: self._is_duplicate(row, la, line_index_dict), axis=1)
+        # Handle parallel lines
+        la_ref_unique = la_ref.drop_duplicates(subset=["line_id"], keep="first")
 
-        # Reverse flow values for duplicate (reverse direction) entries
-        df.loc[df["duplicate"], "values"] *= -1
+        # 3. Vectorized Map
+        # Map line index
+        line_map = la_ref_unique.set_index("line_id")["line_index"]
+        df["line"] = df["line_id"].map(line_map)
 
-        # Average flows for same line and time step
-        df["values"] = df.groupby(["line", "k"])["values"].transform(
-            lambda x: x.mean() if len(x) > 1 else x
-        )
+        # Map reference nodes (to standardize direction and preserve i/j)
+        ref_i_map = la_ref_unique.set_index("line_id")["i"]
+        ref_j_map = la_ref_unique.set_index("line_id")["j"]
 
-        # Keep only non-duplicate entries
-        df = df[~df["duplicate"]].copy()
-        df = df.drop(columns=["duplicate"])
-        df = df.reset_index(drop=True)
+        df["ref_i"] = df["line_id"].map(ref_i_map)
+        df["ref_j"] = df["line_id"].map(ref_j_map)
 
-        # Convert line to string for consistency with callback IDs
-        df["line"] = df["line"].astype(str)
+        # 4. Handle Reverse Flows
+        df = df.dropna(subset=["line", "ref_i", "ref_j"])
+        is_reverse = df["i"] != df["ref_i"]
+        df.loc[is_reverse, "values"] *= -1
+
+        # 5. Aggregate duplicates
+        df = df.groupby(["line", "line_id", "k", "rp", "ref_i", "ref_j"], as_index=False)["values"].mean()
+
+        # 6. Final cleanup
+        # Rename ref_i/ref_j back to i/j for the UI handler
+        df = df.rename(columns={"ref_i": "i", "ref_j": "j"})
+        df["line"] = df["line"].astype(int).astype(str)
 
         return df
-
-    @staticmethod
-    def _build_line_index(la: pd.DataFrame) -> dict:
-        """Build a mapping from frozenset(i, j) to line index."""
-        line_index = {}
-        for idx, row in la.iterrows():
-            key = frozenset([str(row["i"]), str(row["j"])])
-            if key not in line_index:
-                line_index[key] = len(line_index)
-        return line_index
-
-    @staticmethod
-    def _get_line_index(row: pd.Series, line_index_dict: dict) -> int:
-        """Get the line index for a row."""
-        key = frozenset([str(row["i"]), str(row["j"])])
-        return line_index_dict.get(key, -1)
-
-    @staticmethod
-    def _is_duplicate(row: pd.Series, la: pd.DataFrame, line_index_dict: dict) -> bool:
-        """Check if row is a duplicate (reverse direction) entry."""
-        key = frozenset([str(row["i"]), str(row["j"])])
-        line_idx = line_index_dict.get(key, -1)
-
-        if line_idx < 0 or line_idx >= len(la):
-            return False
-
-        original_line = la.iloc[line_idx]
-        return [str(row["i"]), str(row["j"])] != [str(original_line["i"]), str(original_line["j"])]
 
     @staticmethod
     def _load_vgenp(conn: sqlite3.Connection) -> pd.DataFrame:
@@ -366,9 +351,7 @@ class SQLiteDataLoader(DataLoaderStrategy):
         return df[required_cols]
 
     @staticmethod
-    def _load_vstintrares(
-            conn: sqlite3.Connection,
-            gi: pd.DataFrame) -> pd.DataFrame:
+    def _load_vstintrares(conn: sqlite3.Connection, gi: pd.DataFrame) -> pd.DataFrame:
         """
         Load storage state of charge variable (vStIntraRes).
 
@@ -387,9 +370,15 @@ class SQLiteDataLoader(DataLoaderStrategy):
         df = df.merge(gi[["g", "i"]], left_on="storageUnits", right_on="g", how="left").drop(columns=["g"])
         return df
 
-    def _load_ppmax(self, conn: sqlite3.Connection, la: pd.DataFrame) -> pd.DataFrame:
-        """Load line capacity parameter (pPmax)."""
+    @staticmethod
+    def _load_ppmax(conn: sqlite3.Connection, la: pd.DataFrame) -> pd.DataFrame:
+        """
+        Load line capacity parameter (pPmax) using vectorized operations.
+        """
+        print("  -> Loading pPmax...")
         df = pd.read_sql_query("SELECT * FROM pPmax", conn)
+
+        # Rename columns: level_0 -> i, level_1 -> j, level_2 -> c
         rename_map = {"level_0": "i", "level_1": "j", "level_2": "c"}
         df = df.rename(columns=rename_map)
 
@@ -397,14 +386,38 @@ class SQLiteDataLoader(DataLoaderStrategy):
         df["i"] = df["i"].astype(str)
         df["j"] = df["j"].astype(str)
 
-        # Add canonical line identifier
+        # 1. Add canonical IDs to pPmax data
         df = h.add_canonical_line_ids(df, "i", "j")
 
-        # Build line index
-        line_index_dict = self._build_line_index(la)
-        df["line"] = df.apply(lambda row: self._get_line_index(row, line_index_dict), axis=1)
-        df = df.groupby("line_id", as_index=False).agg({"values": "mean", "line": "first"})
-        df["line"] = df["line"].astype(str)
+        # 2. Prepare reference Lines (la) data
+        la_ref = la.copy()
+        la_ref = h.add_canonical_line_ids(la_ref, "i", "j")
+        la_ref = la_ref.reset_index(drop=True)
+        la_ref['line_index'] = la_ref.index
+
+        # Handle parallel lines by keeping the first occurrence
+        la_ref_unique = la_ref.drop_duplicates(subset=["line_id"], keep="first")
+
+        # 3. Vectorized Map - Create the required columns
+        line_map = la_ref_unique.set_index("line_id")["line_index"]
+        ref_i_map = la_ref_unique.set_index("line_id")["i"]
+        ref_j_map = la_ref_unique.set_index("line_id")["j"]
+
+        # Apply the maps to create the new columns
+        df["line"] = df["line_id"].map(line_map)
+        df["ref_i"] = df["line_id"].map(ref_i_map)
+        df["ref_j"] = df["line_id"].map(ref_j_map)
+
+        # Drop rows where line mapping failed
+        df = df.dropna(subset=["line", "ref_i", "ref_j"])
+
+        # 4. Group by line index
+        # We take the mean capacity if multiple entries exist for the same line (e.g. A->B and B->A)
+        df = df.groupby(["line", "line_id", "ref_i", "ref_j"], as_index=False)["values"].mean()
+
+        # Ensure line column is string for consistency
+        df = df.rename(columns={"ref_i": "i", "ref_j": "j"})
+        df["line"] = df["line"].astype(int).astype(str)
 
         return df
 

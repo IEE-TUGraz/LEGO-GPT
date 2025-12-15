@@ -304,7 +304,6 @@ class ExcelExtractor:
 
         if df is not None:
             df = df.drop_duplicates(subset=["values"])
-            df = df.set_index("values")
 
         return df
 
