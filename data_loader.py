@@ -36,7 +36,7 @@ class LEGOData:
     vLineP: pd.DataFrame = field(default_factory=pd.DataFrame)  # Active power flow
     vLineQ: Optional[pd.DataFrame] = None  # Reactive power flow
     vGenP: pd.DataFrame = field(default_factory=pd.DataFrame)  # Generator active power
-    vSOCP_cii: Optional[pd.DataFrame] = None  # Voltage (SOCP formulation)
+    vSOCP: Optional[pd.DataFrame] = None  # Voltage (SOCP formulation)
     vStIntraRes: Optional[pd.DataFrame] = None  # Storage state of charge
 
     # Parameters
@@ -139,9 +139,14 @@ class SQLiteDataLoader(DataLoaderStrategy):
             if "vGenP" in tables:
                 print("  -> Loading vGenP...")
                 data.vGenP = self._load_vgenp(conn)
-            if "vSOCP_cii" in tables:
+            if "vSOCP_cii" in tables and "vSOCP_ui" in tables:
+                raise ValueError("Cannot load both vSOCP_cii and vSOCP_ui simultaneously.")
+            if "vSOCP_cii" in tables and "vSOCP_ui" not in tables:
                 print("  -> Loading vSOCP_cii...")
-                data.vSOCP_cii = self._load_vsocp_cii(conn)
+                data.vSOCP = self._load_vsocp_cii(conn)
+            if "vSOCP_ui" in tables and "vSOCP_cii" not in tables:
+                print("  -> Loading vSOCP_ui...")
+                data.vSOCP = self._load_vsocp_ui(conn)
             if "vStIntraRes" in tables:
                 print("  -> Loading vStIntraRes...")
                 data.vStIntraRes = self._load_vstintrares(conn, data.gi)
@@ -347,6 +352,18 @@ class SQLiteDataLoader(DataLoaderStrategy):
         for col in required_cols:
             if col not in df.columns:
                 raise ValueError(f"vSOCP_cii missing required column: {col}")
+
+        return df[required_cols]
+
+    @staticmethod
+    def _load_vsocp_ui(conn: sqlite3.Connection) -> pd.DataFrame:
+        """Load voltage variable (vSOCP_ui)."""
+        df = pd.read_sql_query("SELECT * FROM vSOCP_ui", conn)
+
+        required_cols = ["rp", "k", "i", "values"]
+        for col in required_cols:
+            if col not in df.columns:
+                raise ValueError(f"vSOCP_ui missing required column: {col}")
 
         return df[required_cols]
 
@@ -612,6 +629,7 @@ def get_data(obj) -> None:
     if obj.input_type == "sqlite":
         loader = SQLiteDataLoader()
     elif obj.input_type == "excel":
+        print("--- DEPRECATED: Excel Data Loader (Legacy Support) ---")
         loader = ExcelDataLoader()
     else:
         raise ValueError(
@@ -652,8 +670,8 @@ def _transfer_data_to_object(obj, data: LEGOData) -> None:
         obj.vLineQ = data.vLineQ
     if not data.vGenP.empty:
         obj.vGenP = data.vGenP
-    if data.vSOCP_cii is not None and not data.vSOCP_cii.empty:
-        obj.vSOCP_cii = data.vSOCP_cii
+    if data.vSOCP is not None and not data.vSOCP.empty:
+        obj.vSOCP= data.vSOCP
     if data.vStIntraRes is not None and not data.vStIntraRes.empty:
         obj.vStIntraRes = data.vStIntraRes
 

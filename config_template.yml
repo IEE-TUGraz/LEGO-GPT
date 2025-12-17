@@ -13,6 +13,7 @@ tables:
   - vLineQ            # Reactive power flow (optional)
   - vGenP             # Generator active power
   - vSOCP_cii         # Voltage (SOCP formulation)
+  - vSOCP_ui          # Voltage (SOCP branch flow formulation)
   - pPmax             # Line thermal limits
   - vStIntraRes       # Storage state of charge
   - coords            # Node coordinates (dummy created if not present)

@@ -112,10 +112,10 @@ class NetworkMapGenerator:
             time_value: Any
     ) -> pd.DataFrame:
         """Get voltage data for the selected time."""
-        if not hasattr(self._data, "vSOCP_cii") or self._data.vSOCP_cii is None:
+        if not hasattr(self._data, "vSOCP") or self._data.vSOCP is None:
             return pd.DataFrame(columns=["i", "values"])
 
-        df = self._filter_by_time(self._data.vSOCP_cii, period, time_value)
+        df = self._filter_by_time(self._data.vSOCP, period, time_value)
         return df[["i", "values"]] if not df.empty else pd.DataFrame(columns=["i", "values"])
 
     def _generate_network_layer(
