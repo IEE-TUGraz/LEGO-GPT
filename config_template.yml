@@ -1,4 +1,4 @@
-input_type: sqlite  # sqlite, V2G or excel
+input_type: sqlite  # sqlite or excel
 input_dir: PATH_TO_LEGO_RESULTS
 
 # Tables to load (names must match SQLite table names or Excel processing logic)
@@ -12,7 +12,7 @@ tables:
   - vLineP            # Active power flow
   - vLineQ            # Reactive power flow (optional)
   - vGenP             # Generator active power
-  - vSOCP_cii         # Voltage (SOCP  node injection formulation)
+  - vSOCP_cii         # Voltage (SOCP formulation)
   - vSOCP_ui          # Voltage (SOCP branch flow formulation)
   - pPmax             # Line thermal limits
   - vStIntraRes       # Storage state of charge
