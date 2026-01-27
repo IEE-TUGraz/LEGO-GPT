@@ -133,7 +133,7 @@ class AppConfig:
         graph_options: Graph visualization configuration.
     """
     input_dir: str
-    input_type: Literal["sqlite", "excel"]
+    input_type: Literal["sqlite", "excel", "V2G"]
     tables: list[str]
     dropdown_options_y: list[DropdownOption]
     dropdown_options_x: list[DropdownOption]
@@ -154,7 +154,7 @@ class AppConfig:
 
     def _validate_input_type(self) -> None:
         """Validate that input_type is supported."""
-        valid_types = ("sqlite", "excel")
+        valid_types = ("sqlite", "excel", "V2G")
         if self.input_type not in valid_types:
             raise ValueError(
                 f"Invalid input_type: '{self.input_type}'. "

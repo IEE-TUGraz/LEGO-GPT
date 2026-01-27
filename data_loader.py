@@ -522,6 +522,446 @@ class SQLiteDataLoader(DataLoaderStrategy):
             return None
 
 
+class V2GDataLoader(DataLoaderStrategy):
+    """Data loader for SQLite database format."""
+
+    # Technology inference rules based on generator name prefixes
+    TECHNOLOGY_PREFIXES = {
+        "PV_": "Solar",
+        "Wind_": "Wind",
+        "Hydro_": "RoR",
+    }
+
+    def load(self, input_dir: str, tables: list[str]) -> LEGOData:
+        """
+        Load data from a SQLite database with progress tracking.
+
+        Args:
+            input_dir: Path to the directory containing result.sqlite or model.sqlite.
+            tables: List of table names to load.
+
+        Returns:
+            LEGOData container with all loaded data.
+        """
+        print(f"--- Starting SQLite Data Load ---")
+        data = LEGOData()
+
+        # Determine SQLite file path
+        db_path = self._find_database(input_dir)
+        print(f"Database found: {db_path}")
+
+        with sqlite3.connect(db_path) as conn:
+            # Load sets
+            print("Loading Sets (i, k, rp, g, la)...")
+            if "i" in tables:
+                data.i = self._load_set(conn, "Buses")
+            if "k" in tables:
+                data.k = self._load_set(conn, "Time")
+            if "rp" in tables:
+                data.rp = "rp01"  # V2G does not use representative periods
+            # if "g" in tables:
+            #     data.g = self._load_set(conn, "Generators")
+            # if "la" in tables:
+            #     data.la = self._load_lines(conn)
+
+            # # Load generator-node mapping with technology
+            # if "gi" in tables:
+            #     print("Loading Generator Mappings (gi)...")
+            #     data.gi = self._load_gi(conn)
+
+            # Load variables
+            print("Loading Variables (this may take time)...")
+            if "vLineP" in tables:
+                print("  -> Loading vLineP...")
+                data.vLineP = self._load_vline(conn, "vLineP", data.la)
+            if "vLineQ" in tables:
+                print("  -> Loading vLineQ...")
+                data.vLineQ = self._load_vline(conn, "vLineQ", data.la)
+            # if "vGenP" in tables:
+            #     print("  -> Loading vGenP...")
+            #     data.vGenP = self._load_vgenp(conn)
+            if "vSOCP_cii" in tables and "vSOCP_ui" in tables:
+                raise ValueError("Cannot load both vSOCP_cii and vSOCP_ui simultaneously.")
+            if "vSOCP_cii" in tables and "vSOCP_ui" not in tables:
+                print("  -> Loading vSOCP_cii...")
+                data.vSOCP = self._load_vsocp_cii(conn)
+            if "vSOCP_ui" in tables and "vSOCP_cii" not in tables:
+                print("  -> V2G only supports vSOCP_cii...")
+            # if "vStIntraRes" in tables:
+            #     print("  -> Loading vStIntraRes...")
+            #     data.vStIntraRes = self._load_vstintrares(conn, data.gi)
+
+            # Load parameters
+            # print("Loading Parameters...")
+            # if "pPmax" in tables:
+            #     print("  -> Loading pPmax...")
+            #     data.pPmax = self._load_ppmax(conn, data.la)
+            #
+            # # Load coordinates
+            # if "coords" in tables:
+            #     print("Loading Coordinates...")
+            #     data.coords = self._load_coords(conn)
+            #
+            # # Load voltage bounds
+            # if "voltage_bounds" in tables:
+            #     print("Loading Voltage Bounds...")
+            #     data.voltage_bounds = self._load_voltage_bounds(conn)
+
+        print("--- SQLite Data Load Complete ---")
+        return data
+
+    @staticmethod
+    def _find_database(input_dir: str) -> str:
+        """Find the SQLite database file in the input directory."""
+        for filename in ["model.sqlite", "result.sqlite"]:
+            path = os.path.join(input_dir, filename)
+            if os.path.exists(path):
+                return path
+
+        # If input_dir is the file itself
+        if os.path.isfile(input_dir) and input_dir.endswith(".sqlite"):
+            return input_dir
+
+        raise FileNotFoundError(
+            f"No SQLite database found in {input_dir}. "
+            "Expected 'model.sqlite' or 'result.sqlite'."
+        )
+
+    @staticmethod
+    def _load_set(conn: sqlite3.Connection, table_name: str) -> pd.DataFrame:
+        """Load a set table (i, k, rp, g) and standardize column names."""
+        df = pd.read_sql_query(f"SELECT * FROM {table_name}", conn)
+
+        # Drop index column if present
+        if "index" in df.columns:
+            df = df.drop(columns=["index"])
+
+        # Rename first column to 'values'
+        if "0" in df.columns:
+            df = df.rename(columns={"0": "values"})
+
+        return df
+
+    @staticmethod
+    def _load_lines(conn: sqlite3.Connection) -> pd.DataFrame:
+        """Load line set (la) and standardize column names."""
+        df = pd.read_sql_query("SELECT * FROM la", conn)
+
+        # Drop index column if present
+        if "index" in df.columns:
+            df = df.drop(columns=["index"])
+
+        # Rename columns: 0 -> i, 1 -> j, 2 -> c
+        rename_map = {"0": "i", "1": "j", "2": "c"}
+        df = df.rename(columns=rename_map)
+
+        # Ensure string types
+        df["i"] = df["i"].astype(str)
+        df["j"] = df["j"].astype(str)
+        if "c" in df.columns:
+            df["c"] = df["c"].astype(str)
+
+        return df
+
+    def _load_gi(self, conn: sqlite3.Connection) -> pd.DataFrame:
+        """
+        Load generator-node mapping and infer technology type.
+
+        Uses gi table for generators and gi_storage for storage units.
+        Technology is inferred from generator name prefixes.
+        """
+        # Load main gi table
+        df_gi = pd.read_sql_query("SELECT * FROM gi", conn)
+        if "index" in df_gi.columns:
+            df_gi = df_gi.drop(columns=["index"])
+        df_gi = df_gi.rename(columns={"0": "g", "1": "i"})
+
+        # Load gi_storage if exists
+        try:
+            df_gi_storage = pd.read_sql_query("SELECT * FROM gi_storage", conn)
+            if "index" in df_gi_storage.columns:
+                df_gi_storage = df_gi_storage.drop(columns=["index"])
+            df_gi_storage = df_gi_storage.rename(columns={"0": "g", "1": "i"})
+
+            # Combine gi and gi_storage
+            df_gi = pd.concat([df_gi, df_gi_storage], ignore_index=True).drop_duplicates()
+        except Exception:
+            pass  # gi_storage may not exist
+
+        # Infer technology from generator names
+        df_gi["tec"] = df_gi["g"].apply(self._infer_technology)
+
+        return df_gi
+
+    def _infer_technology(self, generator_name: str) -> str:
+        """Infer technology type from generator name prefix."""
+        gen_upper = generator_name.upper()
+
+        for prefix, technology in self.TECHNOLOGY_PREFIXES.items():
+            if gen_upper.startswith(prefix):
+                return technology
+
+        return "unknown"
+
+    @staticmethod
+    def _load_vline(conn: sqlite3.Connection, table_name: str, la: pd.DataFrame) -> pd.DataFrame:
+        """
+        Load line flow variable (vLineP or vLineQ) using vectorized operations.
+        Handles parallel lines by mapping to the first occurrence.
+
+        Args:
+            conn: Database connection.
+            table_name: Table name (vLineP or vLineQ).
+            la: Lines dataframe for line indexing.
+
+        Returns:
+            Processed line flow dataframe with line indices and canonical IDs.
+        """
+        df = pd.read_sql_query(f"SELECT * FROM {table_name}", conn)
+
+        rename_map = {
+            "level_0": "rp", "level_1": "k", "level_2": "i",
+            "level_3": "j", "level_4": "c"
+        }
+        df = df.rename(columns=rename_map)
+
+        # Ensure string types
+        df["i"] = df["i"].astype(str)
+        df["j"] = df["j"].astype(str)
+
+        # 1. Add canonical IDs
+        df = h.add_canonical_line_ids(df, "i", "j")
+
+        # 2. Prepare reference Lines (la) data
+        la_ref = la.copy()
+        la_ref = h.add_canonical_line_ids(la_ref, "i", "j")
+        la_ref = la_ref.reset_index(drop=True)
+        la_ref['line_index'] = la_ref.index
+
+        # Handle parallel lines
+        la_ref_unique = la_ref.drop_duplicates(subset=["line_id"], keep="first")
+
+        # 3. Vectorized Map
+        # Map line index
+        line_map = la_ref_unique.set_index("line_id")["line_index"]
+        df["line"] = df["line_id"].map(line_map)
+
+        # Map reference nodes (to standardize direction and preserve i/j)
+        ref_i_map = la_ref_unique.set_index("line_id")["i"]
+        ref_j_map = la_ref_unique.set_index("line_id")["j"]
+
+        df["ref_i"] = df["line_id"].map(ref_i_map)
+        df["ref_j"] = df["line_id"].map(ref_j_map)
+
+        # 4. Handle Reverse Flows
+        df = df.dropna(subset=["line", "ref_i", "ref_j"])
+        is_reverse = df["i"] != df["ref_i"]
+        df.loc[is_reverse, "values"] *= -1
+
+        # 5. Aggregate duplicates
+        df = df.groupby(["line", "line_id", "k", "rp", "ref_i", "ref_j"], as_index=False)["values"].mean()
+
+        # 6. Final cleanup
+        # Rename ref_i/ref_j back to i/j for the UI handler
+        df = df.rename(columns={"ref_i": "i", "ref_j": "j"})
+        df["line"] = df["line"].astype(int).astype(str)
+
+        return df
+
+    @staticmethod
+    def _load_vgenp(conn: sqlite3.Connection) -> pd.DataFrame:
+        """Load generator power variable (vGenP)."""
+        df = pd.read_sql_query("SELECT * FROM vGenP", conn)
+
+        # Table should already have proper column names: rp, k, g, values
+        required_cols = ["rp", "k", "g", "values"]
+
+        # Ensure all required columns exist
+        for col in required_cols:
+            if col not in df.columns:
+                raise ValueError(f"vGenP missing required column: {col}")
+
+        return df[required_cols]
+
+    @staticmethod
+    def _load_vsocp_cii(conn: sqlite3.Connection) -> pd.DataFrame:
+        """Load voltage variable (vSOCP_cii)."""
+        df = pd.read_sql_query("SELECT * FROM vSOCP_cii", conn)
+
+        required_cols = ["rp", "k", "i", "values"]
+        for col in required_cols:
+            if col not in df.columns:
+                raise ValueError(f"vSOCP_cii missing required column: {col}")
+
+        return df[required_cols]
+
+    @staticmethod
+    def _load_vsocp_ui(conn: sqlite3.Connection) -> pd.DataFrame:
+        """Load voltage variable (vSOCP_ui)."""
+        df = pd.read_sql_query("SELECT * FROM vSOCP_ui", conn)
+
+        required_cols = ["rp", "k", "i", "values"]
+        for col in required_cols:
+            if col not in df.columns:
+                raise ValueError(f"vSOCP_ui missing required column: {col}")
+
+        return df[required_cols]
+
+    @staticmethod
+    def _load_vstintrares(conn: sqlite3.Connection, gi: pd.DataFrame) -> pd.DataFrame:
+        """
+        Load storage state of charge variable (vStIntraRes).
+
+        Adds node information from gi mapping.
+        """
+        df = pd.read_sql_query("SELECT * FROM vStIntraRes", conn)
+
+        # Rename storage unit column
+        if "intraStorageUnits" in df.columns:
+            df = df.rename(columns={"intraStorageUnits": "storageUnits"})
+
+        required_cols = ["rp", "k", "storageUnits", "values"]
+        for col in required_cols:
+            if col not in df.columns:
+                raise ValueError(f"vStIntraRes missing required column: {col}")
+        df = df.merge(gi[["g", "i"]], left_on="storageUnits", right_on="g", how="left").drop(columns=["g"])
+        return df
+
+    @staticmethod
+    def _load_ppmax(conn: sqlite3.Connection, la: pd.DataFrame) -> pd.DataFrame:
+        """
+        Load line capacity parameter (pPmax) using vectorized operations.
+        """
+        print("  -> Loading pPmax...")
+        df = pd.read_sql_query("SELECT * FROM pPmax", conn)
+
+        # Rename columns: level_0 -> i, level_1 -> j, level_2 -> c
+        rename_map = {"level_0": "i", "level_1": "j", "level_2": "c"}
+        df = df.rename(columns=rename_map)
+
+        # Ensure string types
+        df["i"] = df["i"].astype(str)
+        df["j"] = df["j"].astype(str)
+
+        # 1. Add canonical IDs to pPmax data
+        df = h.add_canonical_line_ids(df, "i", "j")
+
+        # 2. Prepare reference Lines (la) data
+        la_ref = la.copy()
+        la_ref = h.add_canonical_line_ids(la_ref, "i", "j")
+        la_ref = la_ref.reset_index(drop=True)
+        la_ref['line_index'] = la_ref.index
+
+        # Handle parallel lines by keeping the first occurrence
+        la_ref_unique = la_ref.drop_duplicates(subset=["line_id"], keep="first")
+
+        # 3. Vectorized Map - Create the required columns
+        line_map = la_ref_unique.set_index("line_id")["line_index"]
+        ref_i_map = la_ref_unique.set_index("line_id")["i"]
+        ref_j_map = la_ref_unique.set_index("line_id")["j"]
+
+        # Apply the maps to create the new columns
+        df["line"] = df["line_id"].map(line_map)
+        df["ref_i"] = df["line_id"].map(ref_i_map)
+        df["ref_j"] = df["line_id"].map(ref_j_map)
+
+        # Drop rows where line mapping failed
+        df = df.dropna(subset=["line", "ref_i", "ref_j"])
+
+        # 4. Group by line index
+        # We take the mean capacity if multiple entries exist for the same line (e.g. A->B and B->A)
+        df = df.groupby(["line", "line_id", "ref_i", "ref_j"], as_index=False)["values"].mean()
+
+        # Ensure line column is string for consistency
+        df = df.rename(columns={"ref_i": "i", "ref_j": "j"})
+        df["line"] = df["line"].astype(int).astype(str)
+
+        return df
+
+    @staticmethod
+    def _load_coords(conn: sqlite3.Connection) -> pd.DataFrame:
+        """
+        Load node coordinates from 'coordsLat' and 'coordsLon' tables.
+
+        Raises:
+            ValueError: If tables are missing, malformed, or cannot be merged.
+        """
+        try:
+            # 1. Load the raw tables
+            df_lat = pd.read_sql_query("SELECT * FROM coordsLat", conn)
+            df_lon = pd.read_sql_query("SELECT * FROM coordsLon", conn)
+
+            # 2. Helper to standardize columns (Node ID -> 'values', Coord -> 'lat'/'lon')
+            def standardize_table(df, coord_name):
+                # Remove generic index if present
+                if "index" in df.columns:
+                    df = df.drop(columns=["index"])
+
+                # Identify the Node ID column (usually 'i' or '0')
+                node_col = None
+                if "i" in df.columns:
+                    node_col = "i"
+                elif "0" in df.columns:
+                    node_col = "0"
+                else:
+                    # Fallback: assume the first column is the ID if 'i' isn't found
+                    node_col = df.columns[0]
+
+                # Identify the Value column (usually 'values', '1', or the remaining column)
+                # We assume the column that isn't the node_col is the data
+                value_cols = [c for c in df.columns if c != node_col]
+                if not value_cols:
+                    raise ValueError(f"Could not identify coordinate value column in {coord_name} table")
+                val_col = value_cols[0]
+
+                # Rename and cast
+                df = df.rename(columns={node_col: "values", val_col: coord_name})
+                df["values"] = df["values"].astype(str)
+
+                return df[["values", coord_name]]
+
+            # 3. Process both dataframes
+            df_lat = standardize_table(df_lat, "lat")
+            df_lon = standardize_table(df_lon, "lon")
+
+            # 4. Merge on the node identifier ('values')
+            df_coords = pd.merge(df_lat, df_lon, on="values", how="inner")
+
+            # 5. Validation
+            if df_coords.empty:
+                raise ValueError("Resulting coordinates table is empty after merge.")
+
+            return df_coords
+
+        except Exception as e:
+            raise ValueError(
+                f"Error loading coordinates: {e}. "
+                "Ensure 'coordsLat' and 'coordsLon' tables exist and contain matching node IDs."
+            )
+
+    @staticmethod
+    def _load_voltage_bounds(conn: sqlite3.Connection) -> pd.DataFrame:
+        """Load voltage bounds (pBusMaxV and pBusMinV)."""
+        try:
+            df_max = pd.read_sql_query("SELECT * FROM pBusMaxV", conn)
+            df_min = pd.read_sql_query("SELECT * FROM pBusMinV", conn)
+
+            # Rename value columns
+            df_max = df_max.rename(columns={"values": "pBusMaxV"})
+            df_min = df_min.rename(columns={"values": "pBusMinV"})
+
+            # Merge on node name
+            df = df_max.merge(df_min[["i", "pBusMinV"]], on="i", how="outer")
+            df = df.rename(columns={"i": "values"})
+            df = df.set_index("values")
+
+            return df
+
+        except Exception as e:
+            print(f"Warning: Could not load voltage bounds: {e}")
+            return None
+
+
 # =============================================================================
 # Excel Data Loader (Backwards Compatibility)
 # =============================================================================
@@ -607,7 +1047,7 @@ def get_data(obj) -> None:
             - tables (list): A list of table names to load and process.
 
     Raises:
-        ValueError: If the input_type is not "sqlite" or "excel".
+        ValueError: If the input_type is not "sqlite" or "V2G" or "excel".
 
     Note:
         The processed data is stored as attributes of the provided object.
@@ -628,6 +1068,8 @@ def get_data(obj) -> None:
 
     if obj.input_type == "sqlite":
         loader = SQLiteDataLoader()
+    elif obj.input_type == "V2G":
+        loader = V2GDataLoader()
     elif obj.input_type == "excel":
         print("--- DEPRECATED: Excel Data Loader (Legacy Support) ---")
         loader = ExcelDataLoader()
