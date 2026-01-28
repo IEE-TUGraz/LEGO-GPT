@@ -77,7 +77,7 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
             const voltageMin = feature.properties.voltage_min;
             const voltageMax = feature.properties.voltage_max;
             const total = values.reduce((a, b) => a + b, 0);
-            const raw_radius = 8 + Math.sqrt(total) * 90760.637566;
+            const raw_radius = 8 + Math.sqrt(total) * 39.483768;
             const radius = Math.min(raw_radius, 16);
             const scale = radius * 2.5;
 
@@ -229,7 +229,7 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
             const orderedValues = orderedColors.map(color => colorSums[colorIndex[color]]);
             const orderedLabels = orderedColors.map(color => labelMap[color]);
             const total = orderedValues.reduce((a, b) => a + b, 0);
-            const raw_radius = 8 + Math.sqrt(total) * 90760.637566;
+            const raw_radius = 8 + Math.sqrt(total) * 39.483768;
             const radius = Math.min(raw_radius, 16);
             const scale = radius * 2.5;
 

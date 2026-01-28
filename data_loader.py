@@ -1017,8 +1017,8 @@ class V2GDataLoader(DataLoaderStrategy):
     def _load_voltage_bounds(conn: sqlite3.Connection) -> pd.DataFrame:
         """Load voltage bounds from Vmax and Vmin tables."""
         try:
-            df_max = pd.read_sql_query("SELECT * FROM Vmax", conn)
-            df_min = pd.read_sql_query("SELECT * FROM Vmin", conn)
+            df_max = pd.read_sql_query("SELECT * FROM pVmax", conn)
+            df_min = pd.read_sql_query("SELECT * FROM pVmin", conn)
 
             # Identify bus column (could be 'Buses', 'index', or first column)
             def get_bus_col(df):

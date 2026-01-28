@@ -21,6 +21,8 @@ tables:
   ###############
   # V2G-specific tables
   ###############
+  - pVmax             # Upper nodal Voltage limits (SOCP)
+  - pVmin             # Lower nodal Voltage limits (SOCP)
   - ev                # Electric vehicles set (V2G)
   - ev_availability   # EV availability at nodes (V2G)
   - vDchEV            # EV discharge (V2G)
