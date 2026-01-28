@@ -71,6 +71,10 @@ class NetworkMapGenerator:
         vgenp_filtered = self._filter_by_time(self._data.vGenP, selected_period, selected_time_value)
         vsocp_filtered = self._get_voltage_data(selected_period, selected_time_value)
 
+        # Filter EV discharge data (V2G)
+        vDchEV = getattr(self._data, 'vDchEV', None)
+        vDchEV_filtered = self._filter_by_time(vDchEV, selected_period, selected_time_value) if vDchEV is not None else pd.DataFrame()
+
         # Generate network layer (lines with arrows)
         network_layer = self._generate_network_layer(
             vlinep_filtered,
@@ -80,7 +84,8 @@ class NetworkMapGenerator:
         # Generate node layer (pie charts)
         node_layer = self._generate_node_layer(
             vgenp_filtered,
-            vsocp_filtered
+            vsocp_filtered,
+            vDchEV_filtered
         )
 
         return network_layer, node_layer
@@ -216,7 +221,8 @@ class NetworkMapGenerator:
     def _generate_node_layer(
             self,
             vgenp_filtered: pd.DataFrame,
-            vsocp_filtered: pd.DataFrame
+            vsocp_filtered: pd.DataFrame,
+            vDchEV_filtered: pd.DataFrame = None
     ) -> dl.GeoJSON:
         """Generate the node layer with pie charts."""
         buses = self._data.i
@@ -286,6 +292,17 @@ class NetworkMapGenerator:
             )
         else:
             pivoted["voltage_level"] = pd.NA
+
+        # Add EV discharge data (V2G) - aggregate by node
+        if vDchEV_filtered is not None and not vDchEV_filtered.empty and 'i' in vDchEV_filtered.columns:
+            # Filter out rows where i is NaN
+            vDchEV_with_node = vDchEV_filtered.dropna(subset=['i'])
+            if not vDchEV_with_node.empty:
+                ev_discharge_by_node = vDchEV_with_node.groupby("i")["values"].sum().reset_index()
+                ev_discharge_by_node = ev_discharge_by_node.rename(columns={"values": "V2G_discharging"})
+                pivoted = pivoted.merge(ev_discharge_by_node, on="i", how="left")
+                pivoted["V2G_discharging"] = pivoted["V2G_discharging"].fillna(0)
+                print(f"  [Node Layer] Added EV discharge data for {len(ev_discharge_by_node)} nodes")
 
         # Prepare GeoJSON data
         geo_data = self._prepare_geo_data(pivoted)
@@ -372,6 +389,8 @@ class NetworkMapGenerator:
                 # Mark storage discharge
                 if col in ["BESS"]:
                     label = f"{col} Discharge"
+                elif col == "V2G_discharging":
+                    label = "EV Discharge"
 
                 values.append(val)
                 colors.append(color)
