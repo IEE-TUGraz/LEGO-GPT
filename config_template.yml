@@ -18,6 +18,14 @@ tables:
   - vStIntraRes       # Storage state of charge
   - coords            # Node coordinates (dummy created if not present)
   - voltage_bounds    # Voltage bounds per node
+  ###############
+  # V2G-specific tables
+  ###############
+  - ev                # Electric vehicles set (V2G)
+  - ev_availability   # EV availability at nodes (V2G)
+  - vDchEV            # EV discharge (V2G)
+  - vChEV             # EV charge (V2G)
+  - vSocEV            # EV state of charge (V2G)
 
 dropdown_options_y:
   - label: "Y: Dispatch"
