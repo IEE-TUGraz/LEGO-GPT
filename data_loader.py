@@ -606,6 +606,7 @@ class V2GDataLoader(DataLoaderStrategy):
             if "vSOCP_cii" in tables or "vSOCP_ui" in tables:
                 print("  -> Loading vSOCP (from vCii)...")
                 data.vSOCP = self._load_vsocp(conn)
+                data.vSOCP["values"] = data.vSOCP["values"].clip(lower=0.0).pow(0.5)  # sqrt for voltage magnitude
 
             if "vStIntraRes" in tables:
                 print("  -> Loading vStIntraRes (from vSOC_Batt)...")
