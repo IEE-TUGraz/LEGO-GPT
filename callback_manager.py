@@ -124,19 +124,22 @@ class CallbackManager:
 
     def _register_line_click_callback(self) -> None:
         """Register callback for storing last clicked line."""
-        # Get all line IDs for creating Input components
-        line_tuples = self.data.get_line_tuples()
 
         @self.app.callback(
             Output("last-clicked-line", "data"),
-            [Input(str(line.Index), "n_clicks") for line in line_tuples]
+            Input("line-click-layer", "clickData")
         )
-        def store_last_clicked_line(*args):
+        def store_last_clicked_line(click_data: dict):
             """Store the ID of the last clicked line."""
-            if not ctx.triggered:
+            if not click_data:
                 return dash.no_update
 
-            clicked_id = ctx.triggered[0]['prop_id'].split('.')[0]
+            props = click_data.get("properties", {})
+            clicked_id = props.get("line", props.get("id"))
+            if clicked_id is None:
+                return dash.no_update
+
+            clicked_id = str(clicked_id)
             print(f"Clicked line: {clicked_id}")
             return clicked_id
 

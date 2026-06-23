@@ -10,6 +10,7 @@ from typing import Any
 
 import dash_leaflet as dl
 import dash_leaflet.express as dlx
+from dash_extensions.javascript import assign
 import matplotlib.pyplot as plt
 import pandas as pd
 import plotly.express as px
@@ -139,6 +140,7 @@ class NetworkMapGenerator:
         arrow_size = max(arrow_min, int(zoom * arrow_scale))
 
         network_elements = []
+        click_features = []
 
         for idx, row in vlinep_filtered.iterrows():
             i, j = row["i"], row["j"]
@@ -159,6 +161,19 @@ class NetworkMapGenerator:
                     (self._data.i.loc[j, 'lat'], self._data.i.loc[j, 'lon'])
                 ]
 
+            click_features.append({
+                "type": "Feature",
+                "properties": {
+                    "line": str(line_id),
+                    "id": str(line_id),
+                    "popup": f"Power Flow: {abs(flow):.5f} MW, Line rating: {pPmax:.5f} MW",
+                },
+                "geometry": {
+                    "type": "LineString",
+                    "coordinates": [[lon, lat] for lat, lon in positions],
+                },
+            })
+
             # Get color from colormap
             color = self._get_flow_color(rel_val)
 
@@ -169,7 +184,7 @@ class NetworkMapGenerator:
                 weight=line_weight,
                 opacity=0,
                 id=f"line_base-{line_id}",
-                n_clicks=0
+                interactive=False
             )
 
             # Create polyline for the visible line
@@ -177,11 +192,7 @@ class NetworkMapGenerator:
                 positions=positions,
                 color=color,
                 weight=line_weight,
-                id=str(line_id),
-                children=[
-                    dl.Popup(f"Power Flow: {abs(flow):.5f} MW, Line rating: {pPmax:.5f} MW")
-                ],
-                n_clicks=0
+                id=str(line_id)
             )
 
             # Create arrow decorator
@@ -192,14 +203,32 @@ class NetworkMapGenerator:
                     arrowHead=dict(
                         pixelSize=arrow_size,
                         polygon=False,
-                        pathOptions=dict(stroke=True, color=color)
+                        pathOptions=dict(stroke=True, color=color, interactive=False)
                     )
                 )],
                 children=[polyline_base],
-                n_clicks=0
             )
 
             network_elements.extend([polyline_decorator, polyline_line])
+
+        network_elements.append(
+            dl.GeoJSON(
+                id="line-click-layer",
+                data={
+                    "type": "FeatureCollection",
+                    "features": click_features,
+                },
+                style={
+                    "color": "#000000",
+                    "weight": max(line_weight + 8, 10),
+                    "opacity": 0.0,
+                },
+                onEachFeature=assign(
+                    "function(feature, layer) { layer.bindPopup(feature.properties.popup); }"
+                ),
+                interactive=True,
+            )
+        )
 
         return dl.LayerGroup(
             children=network_elements,
