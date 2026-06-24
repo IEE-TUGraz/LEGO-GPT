@@ -12,6 +12,7 @@ tables:
   - vLineP            # Active power flow
   - vLineQ            # Reactive power flow (optional)
   - vGenP             # Generator active power
+  - pDemandP          # Nodal demand (LEGO)
   - vSOCP_cii         # Voltage (SOCP  node injection formulation)
   - vSOCP_ui          # Voltage (SOCP branch flow formulation)
   - pPmax             # Line thermal limits
@@ -23,6 +24,7 @@ tables:
   ###############
   - pVmax             # Upper nodal Voltage limits (SOCP)
   - pVmin             # Lower nodal Voltage limits (SOCP)
+  - pDemand           # Nodal demand (V2G)
   - ev                # Electric vehicles set (V2G)
   - ev_availability   # EV availability at nodes (V2G)
   - vDchEV            # EV discharge (V2G)
