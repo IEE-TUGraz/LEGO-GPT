@@ -354,6 +354,10 @@ class LayoutBuilder:
                     id="network-map",
                     zoomControl=False,
                     center=center,
+
+                    zoomDelta=0.25,
+                    zoomSnap=0.25,
+                    wheelPxPerZoomLevel=120,
                 ),
             ],
             style={
