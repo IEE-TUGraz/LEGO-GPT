@@ -107,7 +107,7 @@ PLOT_REGISTRY: dict[tuple[str, str], dict] = {
         "color_col": "line",
         "title_global": "Power Flow Over Time",
         "title_local": "Power Flow for Line {line} Over Time",
-        "x_label": "Time",
+        "x_label": "Time in h",
         "y_label": "Power Flow in MW",
         "legend_title": "Line",
         "hover_data": {"values": True, "line": True, "i": True, "j": True},
