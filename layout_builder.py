@@ -463,7 +463,44 @@ class LayoutBuilder:
         )
 
     @staticmethod
-    def _build_panel_header() -> html.Div:
+    def _build_plot_export_control() -> html.Div:
+        """Build the plot export format selector and download button."""
+        return html.Div(
+            children=[
+                dcc.Dropdown(
+                    id="plot-export-format",
+                    options=[
+                        {"label": "SVG", "value": "svg"},
+                        {"label": "PDF", "value": "pdf"},
+                        {"label": "PNG", "value": "png"},
+                    ],
+                    value="svg",
+                    clearable=False,
+                    searchable=False,
+                    style={"width": "75px", "fontSize": "13px"},
+                ),
+                html.Button(
+                    "Export",
+                    id="export-plot-button",
+                    n_clicks=0,
+                    style={
+                        "padding": f"{Spacing.XS} {Spacing.SM}",
+                        "borderRadius": "4px",
+                        "border": "none",
+                        "backgroundColor": Colors.ACCENT,
+                        "color": Colors.TEXT_INVERSE,
+                        "fontWeight": "600",
+                        "fontSize": "13px",
+                        "cursor": "pointer",
+                    },
+                    title="Export this plot as a vector or raster file"
+                ),
+                dcc.Download(id="plot-export-download"),
+            ],
+            style={"display": "flex", "alignItems": "center", "gap": Spacing.XS},
+        )
+
+    def _build_panel_header(self) -> html.Div:
         """Build the plot panel header."""
         return html.Div(
             children=[
@@ -472,6 +509,7 @@ class LayoutBuilder:
                     "fontSize": "15px",
                     "color": Colors.TEXT,
                 }),
+                self._build_plot_export_control(),
                 html.Button(
                     "✕",
                     id="close-plot-panel",

@@ -13,6 +13,7 @@ from dash import Input, Output, State, ctx, dcc
 from dash.exceptions import PreventUpdate
 
 from layout_builder import Colors
+from ui_handler import export_plot_image
 
 if TYPE_CHECKING:
     from data_provider import DataProvider
@@ -70,6 +71,7 @@ class CallbackManager:
         self._register_plot_update_callback()
         self._register_plot_panel_toggle_callback()
         self._register_map_export_callback()
+        self._register_plot_export_callback()
 
     # =========================================================================
     # Network Map Callbacks
@@ -450,6 +452,36 @@ class CallbackManager:
         if "fixed" not in (fixed or []) or axis_min is None or axis_max is None:
             return None
         return [axis_min, axis_max]
+
+    # =========================================================================
+    # Plot Export Callback
+    # =========================================================================
+
+    def _register_plot_export_callback(self) -> None:
+        """Register callback for exporting the analysis plot as SVG/PDF/PNG."""
+
+        @self.app.callback(
+            Output("plot-export-download", "data"),
+            Input("export-plot-button", "n_clicks"),
+            [
+                State("dynamic-plot", "figure"),
+                State("plot-export-format", "value"),
+            ],
+            prevent_initial_call=True
+        )
+        def export_plot(n_clicks: int, figure: dict, fmt: str):
+            """Export the currently displayed analysis plot to a static file."""
+            if not n_clicks or not figure:
+                raise PreventUpdate
+
+            fmt = fmt or "svg"
+            toimage_options = self.config.graph_options.graph_save_options.get(
+                "toImageButtonOptions", {}
+            )
+
+            file_bytes = export_plot_image(figure, fmt=fmt, toimage_options=toimage_options)
+
+            return dcc.send_bytes(lambda buf: buf.write(file_bytes), f"plot.{fmt}")
 
 
 class CallbackRegistry:

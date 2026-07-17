@@ -5,7 +5,13 @@ This module provides functions for generating network map visualizations
 and dynamic plots. It handles the rendering logic for the main UI components.
 """
 
+import json
+import os
+import subprocess
+import sys
+import tempfile
 import uuid
+from pathlib import Path
 from typing import Any
 
 import dash_leaflet as dl
@@ -673,6 +679,64 @@ def generate_map_export(
     generator = NetworkMapGenerator(self)
     export_data = generator.get_export_data(selected_period, selected_time, pq_mode)
     return render_network_figure(export_data, fmt=fmt)
+
+
+def export_plot_image(
+        figure: dict,
+        fmt: str = "svg",
+        toimage_options: dict = None
+) -> bytes:
+    """
+    Render an already-built Plotly figure to a static image file via Kaleido.
+
+    Unlike the modebar's built-in download button (browser-only, no PDF support),
+    this uses Kaleido so PDF export is possible. Takes the figure dict exactly as
+    currently displayed (including any fixed axis ranges), so the export matches
+    what's on screen.
+
+    Runs Kaleido in a short-lived subprocess rather than in-process: calling it
+    directly from within the running Dash server was observed to be far slower
+    (tens of seconds vs. a consistent ~2s standalone) and prone to timing out
+    the browser's callback fetch, likely an asyncio/subprocess interaction with
+    the dev server's own event loop.
+
+    Args:
+        figure: Plotly figure dict, as read from the dcc.Graph's "figure" prop.
+        fmt: Output format - "svg", "pdf", or "png".
+        toimage_options: Optional dict with "width"/"height"/"scale", reused from
+            the same config used for the modebar's download button.
+
+    Returns:
+        Raw bytes of the rendered image.
+
+    Raises:
+        RuntimeError: If the export subprocess fails.
+    """
+    kwargs = {}
+    toimage_options = toimage_options or {}
+    for key in ("width", "height", "scale"):
+        if toimage_options.get(key) is not None:
+            kwargs[key] = toimage_options[key]
+
+    worker_script = str(Path(__file__).parent / "_kaleido_worker.py")
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        figure_path = os.path.join(tmp_dir, "figure.json")
+        output_path = os.path.join(tmp_dir, f"plot.{fmt}")
+
+        with open(figure_path, "w", encoding="utf-8") as f:
+            json.dump(figure, f)
+
+        result = subprocess.run(
+            [sys.executable, worker_script, figure_path, output_path, fmt, json.dumps(kwargs)],
+            capture_output=True,
+            timeout=60,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(f"Plot export failed: {result.stderr.decode('utf-8', errors='replace')}")
+
+        with open(output_path, "rb") as f:
+            return f.read()
 
 
 def generate_dynamic_plot(
