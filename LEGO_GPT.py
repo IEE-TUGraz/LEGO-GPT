@@ -194,7 +194,7 @@ class LEGO_GPT:
     def _create_dynamic_plot_handler(self):
         """Create handler function for dynamic plot updates."""
 
-        def handler(x_axis, y_axis, line_idx, node_idx, selected_period, scope, time_range):
+        def handler(x_axis, y_axis, line_idx, node_idx, selected_period, scope, time_range, y_range=None, x_range=None):
             return generate_dynamic_plot(
                 self=self,
                 x_axis=x_axis,
@@ -203,7 +203,9 @@ class LEGO_GPT:
                 node_idx=node_idx,
                 selected_period=selected_period,
                 scope=scope,
-                time_range=time_range
+                time_range=time_range,
+                y_range=y_range,
+                x_range=x_range
             )
 
         return handler

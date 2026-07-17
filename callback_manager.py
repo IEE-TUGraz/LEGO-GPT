@@ -393,7 +393,13 @@ class CallbackManager:
                 Input("last-clicked-node", "data"),
                 Input("rep-period-dropdown", "value"),
                 Input("local-button", "children"),
-                Input("time-slider-range", "value")
+                Input("time-slider-range", "value"),
+                Input("y-axis-fixed", "value"),
+                Input("y-axis-min", "value"),
+                Input("y-axis-max", "value"),
+                Input("x-axis-fixed", "value"),
+                Input("x-axis-min", "value"),
+                Input("x-axis-max", "value"),
             ]
         )
         def update_dynamic_plot(
@@ -403,7 +409,13 @@ class CallbackManager:
                 node_idx: str,
                 selected_period: str,
                 scope: str,
-                time_range: list[int]
+                time_range: list[int],
+                y_fixed: list[str],
+                y_min: float,
+                y_max: float,
+                x_fixed: list[str],
+                x_min: float,
+                x_max: float
         ):
             """Update the dynamic plot based on user selections."""
             print(
@@ -421,10 +433,23 @@ class CallbackManager:
                     node_idx=node_idx,
                     selected_period=selected_period,
                     scope=scope,
-                    time_range=time_range
+                    time_range=time_range,
+                    y_range=self._resolve_axis_range(y_fixed, y_min, y_max),
+                    x_range=self._resolve_axis_range(x_fixed, x_min, x_max)
                 )
 
             return {}
+
+    @staticmethod
+    def _resolve_axis_range(
+            fixed: list[str],
+            axis_min: float,
+            axis_max: float
+    ):
+        """Return [min, max] if the fixed-range checkbox is on and both bounds are set, else None."""
+        if "fixed" not in (fixed or []) or axis_min is None or axis_max is None:
+            return None
+        return [axis_min, axis_max]
 
 
 class CallbackRegistry:

@@ -562,7 +562,9 @@ class DynamicPlotGenerator:
             node_idx: str,
             selected_period: str,
             scope: str,
-            time_range: list[int]
+            time_range: list[int],
+            y_range: list[float] = None,
+            x_range: list[float] = None
     ) -> go.Figure:
         """
         Generate a dynamic plot.
@@ -575,6 +577,8 @@ class DynamicPlotGenerator:
             selected_period: Selected representative period.
             scope: "Global" or "Local".
             time_range: Time range [start, end].
+            y_range: Fixed [min, max] for the Y-axis, or None to autoscale.
+            x_range: Fixed [min, max] for the X-axis, or None to autoscale.
 
         Returns:
             Plotly Figure object.
@@ -602,6 +606,12 @@ class DynamicPlotGenerator:
 
         # Apply layout options
         fig.update_layout(**self._graph_options.get("layout", {}))
+
+        # Apply fixed axis ranges (overrides autoscaling), for comparing plots across scenarios
+        if y_range:
+            fig.update_yaxes(range=y_range)
+        if x_range:
+            fig.update_xaxes(range=x_range)
 
         return fig
 
@@ -673,7 +683,9 @@ def generate_dynamic_plot(
         node_idx: str,
         selected_period: str,
         scope: str,
-        time_range: list[int]
+        time_range: list[int],
+        y_range: list[float] = None,
+        x_range: list[float] = None
 ) -> go.Figure:
     """
     Generate a dynamic plot.
@@ -689,6 +701,8 @@ def generate_dynamic_plot(
         selected_period: Selected representative period.
         scope: "Global" or "Local".
         time_range: Time range [start, end].
+        y_range: Fixed [min, max] for the Y-axis, or None to autoscale.
+        x_range: Fixed [min, max] for the X-axis, or None to autoscale.
 
     Returns:
         Plotly Figure object.
@@ -701,7 +715,9 @@ def generate_dynamic_plot(
         node_idx=node_idx,
         selected_period=selected_period,
         scope=scope,
-        time_range=time_range
+        time_range=time_range,
+        y_range=y_range,
+        x_range=x_range
     )
 
 

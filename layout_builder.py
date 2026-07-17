@@ -560,6 +560,17 @@ class LayoutBuilder:
                 ),
                 html.Div(
                     children=[
+                        self._build_axis_range_control("Y-Axis", "y"),
+                        self._build_axis_range_control("X-Axis", "x"),
+                    ],
+                    style={
+                        "display": "flex",
+                        "gap": Spacing.LG,
+                        "marginBottom": Spacing.SM,
+                    }
+                ),
+                html.Div(
+                    children=[
                         html.Label("Time Range", style=self._label_style()),
                         dcc.RangeSlider(
                             id="time-slider-range",
@@ -581,6 +592,32 @@ class LayoutBuilder:
                 "flexShrink": "0",
                 "backgroundColor": Colors.SURFACE,
             }
+        )
+
+    def _build_axis_range_control(self, axis_label: str, prefix: str) -> html.Div:
+        """Build a fixed-range control (checkbox + min/max inputs) for one plot axis."""
+        return html.Div(
+            children=[
+                dcc.Checklist(
+                    id=f"{prefix}-axis-fixed",
+                    options=[{"label": f" Fix {axis_label}", "value": "fixed"}],
+                    value=[],
+                    style={"fontSize": "12px", "color": Colors.TEXT_LIGHT, "whiteSpace": "nowrap"},
+                ),
+                dcc.Input(
+                    id=f"{prefix}-axis-min",
+                    type="number",
+                    placeholder="Min",
+                    style={"width": "64px", "fontSize": "12px", "height": "28px"},
+                ),
+                dcc.Input(
+                    id=f"{prefix}-axis-max",
+                    type="number",
+                    placeholder="Max",
+                    style={"width": "64px", "fontSize": "12px", "height": "28px"},
+                ),
+            ],
+            style={"display": "flex", "alignItems": "center", "gap": Spacing.XS},
         )
 
     def _build_stores(self) -> html.Div:
