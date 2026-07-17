@@ -134,12 +134,16 @@ class LayoutBuilder:
                     }
                 ),
 
-                # 3. RIGHT SECTION: Plot Toggle
+                # 3. RIGHT SECTION: Map Export, Plot Toggle
                 html.Div(
-                    children=[self._build_plot_toggle_button()],
+                    children=[
+                        self._build_map_export_control(),
+                        self._build_plot_toggle_button(),
+                    ],
                     style={
                         "display": "flex",
                         "alignItems": "center",
+                        "gap": Spacing.SM,
                     }
                 ),
             ],
@@ -288,6 +292,48 @@ class LayoutBuilder:
         )
 
     @staticmethod
+    def _build_map_export_control() -> html.Div:
+        """Build the map export format selector and download button."""
+        return html.Div(
+            children=[
+                dcc.Dropdown(
+                    id="map-export-format",
+                    options=[
+                        {"label": "SVG", "value": "svg"},
+                        {"label": "PDF", "value": "pdf"},
+                    ],
+                    value="svg",
+                    clearable=False,
+                    searchable=False,
+                    style={"width": "80px", "fontSize": "13px"},
+                ),
+                html.Button(
+                    children=[
+                        html.Span("⬇", style={"marginRight": Spacing.XS}),
+                        html.Span("Export Map"),
+                    ],
+                    id="export-map-button",
+                    n_clicks=0,
+                    style={
+                        "display": "flex",
+                        "alignItems": "center",
+                        "padding": f"{Spacing.SM} {Spacing.MD}",
+                        "borderRadius": "6px",
+                        "border": "none",
+                        "backgroundColor": Colors.ACCENT,
+                        "color": Colors.TEXT_INVERSE,
+                        "fontWeight": "600",
+                        "fontSize": "14px",
+                        "cursor": "pointer",
+                    },
+                    title="Export the current map view as a vector graphic"
+                ),
+                dcc.Download(id="map-export-download"),
+            ],
+            style={"display": "flex", "alignItems": "center", "gap": Spacing.XS},
+        )
+
+    @staticmethod
     def _build_plot_toggle_button() -> html.Button:
         """Build the plot panel toggle button."""
         return html.Button(
@@ -380,7 +426,13 @@ class LayoutBuilder:
                         dcc.Graph(
                             id="dynamic-plot",
                             style={"height": "100%", "width": "100%"},
-                            config={"displayModeBar": True, "displaylogo": False},
+                            config={
+                                "displayModeBar": True,
+                                "displaylogo": False,
+                                "toImageButtonOptions": self.config.graph_options.graph_save_options.get(
+                                    "toImageButtonOptions", {}
+                                ),
+                            },
                         ),
                     ],
                     id="dynamic-plot-container",

@@ -34,4 +34,5 @@ dependencies:
       - dash-leaflet==1.1.1
       - dash-extensions==2.0.4
       - pulp==2.9.0
+      - contextily==1.7.1
       

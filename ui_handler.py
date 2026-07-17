@@ -11,11 +11,14 @@ from typing import Any
 import dash_leaflet as dl
 import dash_leaflet.express as dlx
 from dash_extensions.javascript import assign
+import matplotlib
+matplotlib.use("Agg")  # Headless backend - figures are only rendered to buffers/colormaps, never shown.
 import matplotlib.pyplot as plt
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 
+from map_export import render_network_figure
 from plot_definitions import generate_plot
 
 # =============================================================================
@@ -63,18 +66,9 @@ class NetworkMapGenerator:
         Returns:
             Tuple of (network_layer, node_layer).
         """
-        # Convert time step index to actual value
-        selected_time_value = self._data.k["values"].iloc[selected_time - 1]
-
-        # Filter data for the selected time step
-        vline_data = self._get_line_data(pq_mode)
-        vlinep_filtered = self._filter_by_time(vline_data, selected_period, selected_time_value)
-        vgenp_filtered = self._filter_by_time(self._data.vGenP, selected_period, selected_time_value)
-        vsocp_filtered = self._get_voltage_data(selected_period, selected_time_value)
-
-        # Filter EV discharge data (V2G)
-        vDchEV = getattr(self._data, 'vDchEV', None)
-        vDchEV_filtered = self._filter_by_time(vDchEV, selected_period, selected_time_value) if vDchEV is not None else pd.DataFrame()
+        vlinep_filtered, vgenp_filtered, vsocp_filtered, vDchEV_filtered, _ = self._get_filtered_data(
+            selected_period, selected_time, pq_mode
+        )
 
         # Generate network layer (lines with arrows)
         network_layer = self._generate_network_layer(
@@ -90,6 +84,70 @@ class NetworkMapGenerator:
         )
 
         return network_layer, node_layer
+
+    def get_export_data(
+            self,
+            selected_period: str,
+            selected_time: int,
+            pq_mode: str = "vLineP"
+    ) -> dict[str, Any]:
+        """
+        Get a plain-data (non-Leaflet) representation of the network for static export.
+
+        Reuses the same filtering/aggregation pipeline as `generate()` so the exported
+        figure always matches what's shown on the live map.
+
+        Args:
+            selected_period: Selected representative period.
+            selected_time: Selected time step index (1-based).
+            pq_mode: Power mode ("vLineP" or "vLineQ").
+
+        Returns:
+            Dict with "lines" (list of line records) and "nodes" (list of geo point
+            dicts), plus styling metadata needed to render them.
+        """
+        vlinep_filtered, vgenp_filtered, vsocp_filtered, vDchEV_filtered, selected_time_value = (
+            self._get_filtered_data(selected_period, selected_time, pq_mode)
+        )
+
+        line_records = self._build_line_records(vlinep_filtered)
+        geo_data = self._build_node_geo_data(vgenp_filtered, vsocp_filtered, vDchEV_filtered)
+
+        js_generator = self._data.js_generator
+        return {
+            "lines": line_records,
+            "nodes": geo_data,
+            "line_weight": self._map_options.get("line_weight", 2),
+            "pie_radius": {
+                "min": js_generator.min_radius,
+                "max": js_generator.max_radius,
+                "scale_factor": js_generator.scale_factor,
+            },
+            "selected_period": selected_period,
+            "selected_time_value": selected_time_value,
+            "pq_mode": pq_mode,
+        }
+
+    def _get_filtered_data(
+            self,
+            selected_period: str,
+            selected_time: int,
+            pq_mode: str
+    ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, Any]:
+        """Filter all source dataframes for the selected period/time/mode."""
+        # Convert time step index to actual value
+        selected_time_value = self._data.k["values"].iloc[selected_time - 1]
+
+        vline_data = self._get_line_data(pq_mode)
+        vlinep_filtered = self._filter_by_time(vline_data, selected_period, selected_time_value)
+        vgenp_filtered = self._filter_by_time(self._data.vGenP, selected_period, selected_time_value)
+        vsocp_filtered = self._get_voltage_data(selected_period, selected_time_value)
+
+        # Filter EV discharge data (V2G)
+        vDchEV = getattr(self._data, 'vDchEV', None)
+        vDchEV_filtered = self._filter_by_time(vDchEV, selected_period, selected_time_value) if vDchEV is not None else pd.DataFrame()
+
+        return vlinep_filtered, vgenp_filtered, vsocp_filtered, vDchEV_filtered, selected_time_value
 
     def _get_line_data(self, pq_mode: str) -> pd.DataFrame:
         """Get the appropriate line data based on mode."""
@@ -131,51 +189,29 @@ class NetworkMapGenerator:
     ) -> dl.LayerGroup:
         """Generate the network layer with lines and arrows."""
         line_weight = self._map_options.get("line_weight", 2)
-        arrow_scale = self._map_options.get("arrow_zoom_scale", 0.5)
-        arrow_min = self._map_options.get("arrow_min_size", 0.5)
-        default_zoom = self._map_options.get("default_zoom", 5)
-
-        # Calculate arrow size
-        zoom = zoom_level or default_zoom
-        arrow_size = max(arrow_min, int(zoom * arrow_scale))
+        arrow_size = self._compute_arrow_size(zoom_level)
+        line_records = self._build_line_records(vlinep_filtered)
 
         network_elements = []
         click_features = []
 
-        for idx, row in vlinep_filtered.iterrows():
-            i, j = row["i"], row["j"]
-            flow = row["values"]
-            rel_val = row.get("rel_values", abs(flow) / max(abs(flow), 1))
-            line_id = row["line"]
-            pPmax = row.get("pPmax", 0)
-
-            # Determine positions based on flow direction
-            if flow < 0:
-                positions = [
-                    (self._data.i.loc[j, 'lat'], self._data.i.loc[j, 'lon']),
-                    (self._data.i.loc[i, 'lat'], self._data.i.loc[i, 'lon'])
-                ]
-            else:
-                positions = [
-                    (self._data.i.loc[i, 'lat'], self._data.i.loc[i, 'lon']),
-                    (self._data.i.loc[j, 'lat'], self._data.i.loc[j, 'lon'])
-                ]
+        for rec in line_records:
+            positions = rec["positions"]
+            line_id = rec["line_id"]
+            color = rec["color"]
 
             click_features.append({
                 "type": "Feature",
                 "properties": {
                     "line": str(line_id),
                     "id": str(line_id),
-                    "popup": f"Power Flow: {abs(flow):.5f} MW, Line rating: {pPmax:.5f} MW",
+                    "popup": f"Power Flow: {abs(rec['flow']):.5f} MW, Line rating: {rec['pPmax']:.5f} MW",
                 },
                 "geometry": {
                     "type": "LineString",
                     "coordinates": [[lon, lat] for lat, lon in positions],
                 },
             })
-
-            # Get color from colormap
-            color = self._get_flow_color(rel_val)
 
             # Create polyline for arrow base
             polyline_base = dl.Polyline(
@@ -236,6 +272,48 @@ class NetworkMapGenerator:
             n_clicks=0
         )
 
+    def _compute_arrow_size(self, zoom_level: int) -> int:
+        """Compute the arrow decorator pixel size for the current zoom level."""
+        arrow_scale = self._map_options.get("arrow_zoom_scale", 0.5)
+        arrow_min = self._map_options.get("arrow_min_size", 0.5)
+        default_zoom = self._map_options.get("default_zoom", 5)
+        zoom = zoom_level or default_zoom
+        return max(arrow_min, int(zoom * arrow_scale))
+
+    def _build_line_records(self, vlinep_filtered: pd.DataFrame) -> list[dict]:
+        """Build plain-data records (positions, flow, color) for each line."""
+        records = []
+
+        for idx, row in vlinep_filtered.iterrows():
+            i, j = row["i"], row["j"]
+            flow = row["values"]
+            rel_val = row.get("rel_values", abs(flow) / max(abs(flow), 1))
+            line_id = row["line"]
+            pPmax = row.get("pPmax", 0)
+
+            # Determine positions based on flow direction
+            if flow < 0:
+                positions = [
+                    (self._data.i.loc[j, 'lat'], self._data.i.loc[j, 'lon']),
+                    (self._data.i.loc[i, 'lat'], self._data.i.loc[i, 'lon'])
+                ]
+            else:
+                positions = [
+                    (self._data.i.loc[i, 'lat'], self._data.i.loc[i, 'lon']),
+                    (self._data.i.loc[j, 'lat'], self._data.i.loc[j, 'lon'])
+                ]
+
+            records.append({
+                "line_id": line_id,
+                "positions": positions,
+                "flow": flow,
+                "rel_val": rel_val,
+                "pPmax": pPmax,
+                "color": self._get_flow_color(rel_val),
+            })
+
+        return records
+
     @staticmethod
     def _get_flow_color(rel_val: float) -> str:
         """Get color for flow value using RdYlGn colormap."""
@@ -254,6 +332,34 @@ class NetworkMapGenerator:
             vDchEV_filtered: pd.DataFrame = None
     ) -> dl.GeoJSON:
         """Generate the node layer with pie charts."""
+        geo_data = self._build_node_geo_data(vgenp_filtered, vsocp_filtered, vDchEV_filtered)
+
+        print(f"  [Node Layer] Generated {len(geo_data)} geo points")
+
+        geojson = dlx.dicts_to_geojson(geo_data)
+        geobuf = dlx.geojson_to_geobuf(geojson)
+
+        return dl.GeoJSON(
+            id="node-layer",
+            data=geobuf,
+            format='geobuf',
+            cluster=True,
+            zoomToBoundsOnClick=True,
+            superClusterOptions=dict(
+                radius=self._cluster_options.get("cluster_radius", 60),
+                maxZoom=self._cluster_options.get("maxZoom", 16)
+            ),
+            pointToLayer=self._data.js_generator.pointToLayer(),
+            clusterToLayer=self._data.js_generator.clusterToLayer(),
+        )
+
+    def _build_node_geo_data(
+            self,
+            vgenp_filtered: pd.DataFrame,
+            vsocp_filtered: pd.DataFrame,
+            vDchEV_filtered: pd.DataFrame = None
+    ) -> list[dict]:
+        """Build plain-data geo points (pie values/colors per node) for the node layer."""
         buses = self._data.i
         gi = getattr(self._data, 'gi', pd.DataFrame())
 
@@ -334,26 +440,7 @@ class NetworkMapGenerator:
                 print(f"  [Node Layer] Added EV discharge data for {len(ev_discharge_by_node)} nodes")
 
         # Prepare GeoJSON data
-        geo_data = self._prepare_geo_data(pivoted)
-
-        print(f"  [Node Layer] Generated {len(geo_data)} geo points from {len(pivoted)} pivoted rows")
-
-        geojson = dlx.dicts_to_geojson(geo_data)
-        geobuf = dlx.geojson_to_geobuf(geojson)
-
-        return dl.GeoJSON(
-            id="node-layer",
-            data=geobuf,
-            format='geobuf',
-            cluster=True,
-            zoomToBoundsOnClick=True,
-            superClusterOptions=dict(
-                radius=self._cluster_options.get("cluster_radius", 60),
-                maxZoom=self._cluster_options.get("maxZoom", 16)
-            ),
-            pointToLayer=self._data.js_generator.pointToLayer(),
-            clusterToLayer=self._data.js_generator.clusterToLayer(),
-        )
+        return self._prepare_geo_data(pivoted)
 
     @staticmethod
     def _add_missing_buses(
@@ -547,6 +634,35 @@ def generate_network_map(
     """
     generator = NetworkMapGenerator(self)
     return generator.generate(selected_period, selected_time, zoom_level, pq_mode)
+
+
+def generate_map_export(
+        self: Any,
+        selected_period: str,
+        selected_time: int,
+        pq_mode: str = "vLineP",
+        fmt: str = "svg"
+) -> bytes:
+    """
+    Render the network map as a standalone vector figure for export.
+
+    Unlike the live map, this bypasses dash-leaflet entirely and renders the
+    same filtered line/node data with matplotlib, producing a true vector
+    file (no raster basemap tiles).
+
+    Args:
+        self: Data source object (e.g., LEGO_GPT instance).
+        selected_period: Selected representative period.
+        selected_time: Selected time step index.
+        pq_mode: Power mode ("vLineP" or "vLineQ").
+        fmt: Output format - "svg", "pdf", or "png".
+
+    Returns:
+        Raw bytes of the rendered figure.
+    """
+    generator = NetworkMapGenerator(self)
+    export_data = generator.get_export_data(selected_period, selected_time, pq_mode)
+    return render_network_figure(export_data, fmt=fmt)
 
 
 def generate_dynamic_plot(

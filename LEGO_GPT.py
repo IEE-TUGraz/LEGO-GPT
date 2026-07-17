@@ -36,7 +36,7 @@ from config import load_config
 from data_loader import get_data
 from data_provider import DataProvider
 from layout_builder import LayoutBuilder
-from ui_handler import generate_network_map, generate_dynamic_plot
+from ui_handler import generate_network_map, generate_dynamic_plot, generate_map_export
 
 
 class LEGO_GPT:
@@ -146,7 +146,8 @@ class LEGO_GPT:
         # Create visualization handlers that wrap existing functions
         visualization_handlers = {
             'network_map': self._create_network_map_handler(),
-            'dynamic_plot': self._create_dynamic_plot_handler()
+            'dynamic_plot': self._create_dynamic_plot_handler(),
+            'map_export': self._create_map_export_handler()
         }
 
         # Create and register callback manager
@@ -172,6 +173,20 @@ class LEGO_GPT:
                 selected_time=selected_time,
                 zoom_level=zoom_level,
                 pq_mode=pq_mode
+            )
+
+        return handler
+
+    def _create_map_export_handler(self):
+        """Create handler function for static map export (SVG/PDF/PNG)."""
+
+        def handler(selected_period, selected_time, pq_mode, fmt):
+            return generate_map_export(
+                self=self,
+                selected_period=selected_period,
+                selected_time=selected_time,
+                pq_mode=pq_mode,
+                fmt=fmt
             )
 
         return handler

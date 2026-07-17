@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "lego-gpt",
+      "runtimeExecutable": "C:\\Users\\Stephan\\anaconda3\\envs\\LEGO_GPT_env\\python.exe",
+      "runtimeArgs": ["LEGO_GPT.py", "config.yml"],
+      "port": 8050
+    }
+  ]
+}

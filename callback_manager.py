@@ -9,7 +9,7 @@ and maintainability.
 from typing import TYPE_CHECKING, Callable
 
 import dash
-from dash import Input, Output, State, ctx
+from dash import Input, Output, State, ctx, dcc
 from dash.exceptions import PreventUpdate
 
 from layout_builder import Colors
@@ -69,6 +69,7 @@ class CallbackManager:
         self._register_node_search_zoom_callback()
         self._register_plot_update_callback()
         self._register_plot_panel_toggle_callback()
+        self._register_map_export_callback()
 
     # =========================================================================
     # Network Map Callbacks
@@ -330,6 +331,51 @@ class CallbackManager:
                 new_button_style["backgroundColor"] = Colors.ACCENT  # Normal color
 
             return new_panel_style, new_visible, new_button_style
+
+    # =========================================================================
+    # Map Export Callback
+    # =========================================================================
+
+    def _register_map_export_callback(self) -> None:
+        """Register callback for exporting the network map as a vector graphic."""
+
+        @self.app.callback(
+            Output("map-export-download", "data"),
+            Input("export-map-button", "n_clicks"),
+            [
+                State("rep-period-dropdown", "value"),
+                State("time-slider", "value"),
+                State("pq-toggle-button", "children"),
+                State("map-export-format", "value"),
+            ],
+            prevent_initial_call=True
+        )
+        def export_map(
+                n_clicks: int,
+                selected_period: str,
+                selected_time: int,
+                pq_button_label: str,
+                fmt: str
+        ):
+            """Export the current network map view as a vector graphic."""
+            if not n_clicks:
+                raise PreventUpdate
+
+            handler = self.handlers.get('map_export')
+            if not handler:
+                raise PreventUpdate
+
+            pq_mode = "vLineP" if pq_button_label == "P" else "vLineQ"
+            fmt = fmt or "svg"
+
+            file_bytes = handler(
+                selected_period=selected_period,
+                selected_time=selected_time,
+                pq_mode=pq_mode,
+                fmt=fmt
+            )
+
+            return dcc.send_bytes(lambda buf: buf.write(file_bytes), f"network_map.{fmt}")
 
     # =========================================================================
     # Plot Update Callback

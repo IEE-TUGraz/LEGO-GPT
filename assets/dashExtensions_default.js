@@ -1,6 +1,9 @@
 window.dashExtensions = Object.assign({}, window.dashExtensions, {
     default: {
-        function0: function(feature, latlng) {
+        function0: function(feature, layer) {
+            layer.bindPopup(feature.properties.popup);
+        },
+        function1: function(feature, latlng) {
 
             function pieSVG(opt) {
                 function getCoords(cx, cy, radius, angle) {
@@ -77,7 +80,7 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
             const voltageMin = feature.properties.voltage_min;
             const voltageMax = feature.properties.voltage_max;
             const total = values.reduce((a, b) => a + b, 0);
-            const raw_radius = 8 + Math.sqrt(total) * 31.654470;
+            const raw_radius = 6 + Math.sqrt(total) * 1.000000;
             const radius = Math.min(raw_radius, 16);
             const scale = radius * 2.5;
 
@@ -135,7 +138,7 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
 
             return marker;
         },
-        function1: function(feature, latlng, index, context) {
+        function2: function(feature, latlng, index, context) {
 
             function pieSVG(opt) {
                 function getCoords(cx, cy, radius, angle) {
@@ -229,7 +232,7 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
             const orderedValues = orderedColors.map(color => colorSums[colorIndex[color]]);
             const orderedLabels = orderedColors.map(color => labelMap[color]);
             const total = orderedValues.reduce((a, b) => a + b, 0);
-            const raw_radius = 8 + Math.sqrt(total) * 31.654470;
+            const raw_radius = 6 + Math.sqrt(total) * 1.000000;
             const radius = Math.min(raw_radius, 16);
             const scale = radius * 2.5;
 
