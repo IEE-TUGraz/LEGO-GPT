@@ -166,13 +166,14 @@ class LEGO_GPT:
     def _create_network_map_handler(self):
         """Create handler function for network map updates."""
 
-        def handler(selected_period, selected_time, zoom_level, pq_mode):
+        def handler(selected_period, selected_time, zoom_level, pq_mode, show_voltage=True):
             return generate_network_map(
                 self=self,
                 selected_period=selected_period,
                 selected_time=selected_time,
                 zoom_level=zoom_level,
-                pq_mode=pq_mode
+                pq_mode=pq_mode,
+                show_voltage=show_voltage
             )
 
         return handler

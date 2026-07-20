@@ -66,6 +66,7 @@ class CallbackManager:
         self._register_slider_sync_callback()
         self._register_scope_toggle_callback()
         self._register_pq_toggle_callback()
+        self._register_voltage_toggle_callback()
         self._register_zoom_store_callback()
         self._register_node_search_zoom_callback()
         self._register_plot_update_callback()
@@ -90,7 +91,8 @@ class CallbackManager:
                 Input("time-slider", "value"),
                 Input("map-zoom", "data"),
                 Input("network-map", "viewport"),
-                Input("pq-toggle-button", "children")
+                Input("pq-toggle-button", "children"),
+                Input("voltage-toggle-button", "children")
             ]
         )
         def update_network(
@@ -98,7 +100,8 @@ class CallbackManager:
                 selected_time: int,
                 zoom_level: int,
                 viewport: dict,
-                pq_button_label: str
+                pq_button_label: str,
+                voltage_button_label: str
         ):
             """Update the network map visualization."""
             # Get zoom from viewport if available
@@ -109,6 +112,9 @@ class CallbackManager:
             # Button shows "P" or "Q", convert to "vLineP" or "vLineQ"
             pq_mode = "vLineP" if pq_button_label == "P" else "vLineQ"
 
+            # Button shows "V" (name + voltage) or "Name" (name only)
+            show_voltage = voltage_button_label != "Name"
+
             # Call the network map handler
             handler = self.handlers.get('network_map')
             if handler:
@@ -116,7 +122,8 @@ class CallbackManager:
                     selected_period=selected_period,
                     selected_time=selected_time,
                     zoom_level=zoom_level,
-                    pq_mode=pq_mode
+                    pq_mode=pq_mode,
+                    show_voltage=show_voltage
                 )
 
             return [], []
@@ -234,6 +241,19 @@ class CallbackManager:
             if n_clicks % 2 == 0:
                 return "P"
             return "Q"
+
+    def _register_voltage_toggle_callback(self) -> None:
+        """Register callback for toggling the voltage line on node labels."""
+
+        @self.app.callback(
+            Output("voltage-toggle-button", "children"),
+            Input("voltage-toggle-button", "n_clicks")
+        )
+        def toggle_voltage_label(n_clicks: int) -> str:
+            """Toggle node labels between Name + Voltage and Name only."""
+            if n_clicks % 2 == 0:
+                return "V"
+            return "Name"
 
     # =========================================================================
     # Map Control Callbacks

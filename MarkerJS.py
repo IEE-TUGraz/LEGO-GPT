@@ -164,6 +164,15 @@ class MarkerJS:
         icon with a permanent text label below it, which is dynamically created based
         on the feature's properties.
 
+        Whether the label includes the voltage line is read at render time from
+        `feature.properties.show_voltage` (set per-node when the geo data is built),
+        rather than being baked into this function's source. The JS text this method
+        returns must stay identical across calls: dash-extensions' `assign()` writes
+        each distinct function body to a static assets file once, keyed by call order,
+        and an already-loaded browser tab never picks up a body added after page load -
+        so branching on a Python-side flag here would silently break the toggle on its
+        first use each session.
+
         Returns:
             str: A JavaScript function as a string that defines the point-to-layer
             behavior for Leaflet.
@@ -177,7 +186,7 @@ class MarkerJS:
         - Configures the icon's size and anchor point based on the calculated radius.
         - Creates a Leaflet marker at the given latitude and longitude (`latlng`)
           with the custom icon.
-        - Binds a permanent tooltip showing the node name and voltage.
+        - Binds a permanent tooltip showing the node name (and, if enabled, voltage).
         - Binds a hover-activated popup with detailed information, including
           voltage bounds and generation data.
 
@@ -189,7 +198,6 @@ class MarkerJS:
             - The node name is permanently displayed below the pie chart icon using
               a permanent Leaflet tooltip.
         """
-
         js_function = f"""function(feature, latlng) {{
             {self.pie_svg()}
 
@@ -201,6 +209,7 @@ class MarkerJS:
             const voltage = feature.properties.voltage;
             const voltageMin = feature.properties.voltage_min;
             const voltageMax = feature.properties.voltage_max;
+            const showVoltage = feature.properties.show_voltage !== false;
             const total = values.reduce((a, b) => a + b, 0);
             const raw_radius = {self.min_radius} + Math.sqrt(total) * {self.scale_factor:.6f};
             const radius = Math.min(raw_radius, {self.max_radius});
@@ -223,8 +232,11 @@ class MarkerJS:
             const marker = L.marker(latlng, {{ icon: icon }});
 
             // This is always visible and does not require hover.
+            const tooltipHtml = showVoltage
+                ? `<div style="font-weight: bold; font-size: 11px; color: black; text-align: center;">${{nodeName}}<br/>${{voltage}}</div>`
+                : `<div style="font-weight: bold; font-size: 11px; color: black; text-align: center;">${{nodeName}}</div>`;
             marker.bindTooltip(
-                `<div style="font-weight: bold; font-size: 11px; color: black; text-align: center;">${{nodeName}}<br/>${{voltage}}</div>`,
+                tooltipHtml,
                 {{
                     permanent: true,
                     direction: 'bottom',

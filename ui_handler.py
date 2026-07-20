@@ -58,7 +58,8 @@ class NetworkMapGenerator:
             selected_period: str,
             selected_time: int,
             zoom_level: int,
-            pq_mode: str = "vLineP"
+            pq_mode: str = "vLineP",
+            show_voltage: bool = True
     ) -> MapLayerResult:
         """
         Generate the network map layers.
@@ -68,6 +69,7 @@ class NetworkMapGenerator:
             selected_time: Selected time step index (1-based).
             zoom_level: Current map zoom level.
             pq_mode: Power mode ("vLineP" or "vLineQ").
+            show_voltage: Whether node labels include the voltage line, or just the name.
 
         Returns:
             Tuple of (network_layer, node_layer).
@@ -86,7 +88,8 @@ class NetworkMapGenerator:
         node_layer = self._generate_node_layer(
             vgenp_filtered,
             vsocp_filtered,
-            vDchEV_filtered
+            vDchEV_filtered,
+            show_voltage
         )
 
         return network_layer, node_layer
@@ -335,10 +338,11 @@ class NetworkMapGenerator:
             self,
             vgenp_filtered: pd.DataFrame,
             vsocp_filtered: pd.DataFrame,
-            vDchEV_filtered: pd.DataFrame = None
+            vDchEV_filtered: pd.DataFrame = None,
+            show_voltage: bool = True
     ) -> dl.GeoJSON:
         """Generate the node layer with pie charts."""
-        geo_data = self._build_node_geo_data(vgenp_filtered, vsocp_filtered, vDchEV_filtered)
+        geo_data = self._build_node_geo_data(vgenp_filtered, vsocp_filtered, vDchEV_filtered, show_voltage)
 
         print(f"  [Node Layer] Generated {len(geo_data)} geo points")
 
@@ -363,7 +367,8 @@ class NetworkMapGenerator:
             self,
             vgenp_filtered: pd.DataFrame,
             vsocp_filtered: pd.DataFrame,
-            vDchEV_filtered: pd.DataFrame = None
+            vDchEV_filtered: pd.DataFrame = None,
+            show_voltage: bool = True
     ) -> list[dict]:
         """Build plain-data geo points (pie values/colors per node) for the node layer."""
         buses = self._data.i
@@ -446,7 +451,7 @@ class NetworkMapGenerator:
                 print(f"  [Node Layer] Added EV discharge data for {len(ev_discharge_by_node)} nodes")
 
         # Prepare GeoJSON data
-        return self._prepare_geo_data(pivoted)
+        return self._prepare_geo_data(pivoted, show_voltage)
 
     @staticmethod
     def _add_missing_buses(
@@ -476,7 +481,8 @@ class NetworkMapGenerator:
 
     def _prepare_geo_data(
             self,
-            pivoted: pd.DataFrame) -> list[dict]:
+            pivoted: pd.DataFrame,
+            show_voltage: bool = True) -> list[dict]:
         """Prepare GeoJSON data from pivoted DataFrame."""
         # Ensure default colors
         tech_colors = self._technology_colors.copy()
@@ -534,7 +540,8 @@ class NetworkMapGenerator:
                 "labels": labels,
                 "voltage": f"{row.get('voltage_level', 0):.3f} p.u." if pd.notna(row.get('voltage_level')) else "N/A",
                 "voltage_max": row.get("pBusMaxV", "N/A"),
-                "voltage_min": row.get("pBusMinV", "N/A")
+                "voltage_min": row.get("pBusMinV", "N/A"),
+                "show_voltage": show_voltage
             })
 
         if skipped_count > 0:
@@ -631,7 +638,8 @@ def generate_network_map(
         selected_period: str,
         selected_time: int,
         zoom_level: int,
-        pq_mode: str = "vLineP"
+        pq_mode: str = "vLineP",
+        show_voltage: bool = True
 ) -> MapLayerResult:
     """
     Generate the network map visualization.
@@ -644,12 +652,13 @@ def generate_network_map(
         selected_time: Selected time step index.
         zoom_level: Current map zoom level.
         pq_mode: Power mode ("vLineP" or "vLineQ").
+        show_voltage: Whether node labels include the voltage line, or just the name.
 
     Returns:
         Tuple of (network_layer, node_layer).
     """
     generator = NetworkMapGenerator(self)
-    return generator.generate(selected_period, selected_time, zoom_level, pq_mode)
+    return generator.generate(selected_period, selected_time, zoom_level, pq_mode, show_voltage)
 
 
 def generate_map_export(

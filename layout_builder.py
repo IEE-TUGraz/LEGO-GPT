@@ -113,6 +113,7 @@ class LayoutBuilder:
                         self._build_period_control(),
                         self._build_node_search_control(),
                         self._build_pq_toggle_control(),
+                        self._build_voltage_toggle_control(),
                     ],
                     style={
                         "display": "flex",
@@ -225,6 +226,28 @@ class LayoutBuilder:
                 "boxShadow": "0 1px 3px rgba(0,0,0,0.2)"
             },
             title="Toggle Active/Reactive Power (P/Q)"
+        )
+
+    @staticmethod
+    def _build_voltage_toggle_control() -> html.Button:
+        """Build node-label toggle button (Name + Voltage / Name only)."""
+        return html.Button(
+            "V",
+            id="voltage-toggle-button",
+            n_clicks=0,
+            style={
+                "width": "50px",
+                "height": "38px",
+                "borderRadius": "4px",
+                "border": "none",
+                "backgroundColor": Colors.SURFACE,
+                "color": Colors.TEXT,
+                "fontWeight": "700",
+                "fontSize": "16px",
+                "cursor": "pointer",
+                "boxShadow": "0 1px 3px rgba(0,0,0,0.2)"
+            },
+            title="Toggle node label: Name + Voltage / Name only"
         )
 
     def _build_time_slider_control(self) -> html.Div:

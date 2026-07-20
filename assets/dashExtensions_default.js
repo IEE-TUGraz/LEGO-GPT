@@ -79,8 +79,9 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
             const voltage = feature.properties.voltage;
             const voltageMin = feature.properties.voltage_min;
             const voltageMax = feature.properties.voltage_max;
+            const showVoltage = feature.properties.show_voltage !== false;
             const total = values.reduce((a, b) => a + b, 0);
-            const raw_radius = 6 + Math.sqrt(total) * 67.299179;
+            const raw_radius = 6 + Math.sqrt(total) * 1.000000;
             const radius = Math.min(raw_radius, 16);
             const scale = radius * 2.5;
 
@@ -103,8 +104,11 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
             });
 
             // This is always visible and does not require hover.
+            const tooltipHtml = showVoltage ?
+                `<div style="font-weight: bold; font-size: 11px; color: black; text-align: center;">${nodeName}<br/>${voltage}</div>` :
+                `<div style="font-weight: bold; font-size: 11px; color: black; text-align: center;">${nodeName}</div>`;
             marker.bindTooltip(
-                `<div style="font-weight: bold; font-size: 11px; color: black; text-align: center;">${nodeName}<br/>${voltage}</div>`, {
+                tooltipHtml, {
                     permanent: true,
                     direction: 'bottom',
                     offset: [0, scale / 2 + 5], // Position below the icon
@@ -232,7 +236,7 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
             const orderedValues = orderedColors.map(color => colorSums[colorIndex[color]]);
             const orderedLabels = orderedColors.map(color => labelMap[color]);
             const total = orderedValues.reduce((a, b) => a + b, 0);
-            const raw_radius = 6 + Math.sqrt(total) * 67.299179;
+            const raw_radius = 6 + Math.sqrt(total) * 1.000000;
             const radius = Math.min(raw_radius, 16);
             const scale = radius * 2.5;
 
