@@ -1,6 +1,9 @@
 window.dashExtensions = Object.assign({}, window.dashExtensions, {
     default: {
-        function0: function(feature, latlng) {
+        function0: function(feature, layer) {
+            layer.bindPopup(feature.properties.popup);
+        },
+        function1: function(feature, latlng) {
 
             function pieSVG(opt) {
                 function getCoords(cx, cy, radius, angle) {
@@ -135,7 +138,7 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
 
             return marker;
         },
-        function1: function(feature, latlng, index, context) {
+        function2: function(feature, latlng, index, context) {
 
             function pieSVG(opt) {
                 function getCoords(cx, cy, radius, angle) {

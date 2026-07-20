@@ -9,10 +9,11 @@ and maintainability.
 from typing import TYPE_CHECKING, Callable
 
 import dash
-from dash import Input, Output, State, ctx
+from dash import Input, Output, State, ctx, dcc
 from dash.exceptions import PreventUpdate
 
 from layout_builder import Colors
+from ui_handler import export_plot_image
 
 if TYPE_CHECKING:
     from data_provider import DataProvider
@@ -69,6 +70,8 @@ class CallbackManager:
         self._register_node_search_zoom_callback()
         self._register_plot_update_callback()
         self._register_plot_panel_toggle_callback()
+        self._register_map_export_callback()
+        self._register_plot_export_callback()
 
     # =========================================================================
     # Network Map Callbacks
@@ -124,19 +127,22 @@ class CallbackManager:
 
     def _register_line_click_callback(self) -> None:
         """Register callback for storing last clicked line."""
-        # Get all line IDs for creating Input components
-        line_tuples = self.data.get_line_tuples()
 
         @self.app.callback(
             Output("last-clicked-line", "data"),
-            [Input(str(line.Index), "n_clicks") for line in line_tuples]
+            Input("line-click-layer", "clickData")
         )
-        def store_last_clicked_line(*args):
+        def store_last_clicked_line(click_data: dict):
             """Store the ID of the last clicked line."""
-            if not ctx.triggered:
+            if not click_data:
                 return dash.no_update
 
-            clicked_id = ctx.triggered[0]['prop_id'].split('.')[0]
+            props = click_data.get("properties", {})
+            clicked_id = props.get("line", props.get("id"))
+            if clicked_id is None:
+                return dash.no_update
+
+            clicked_id = str(clicked_id)
             print(f"Clicked line: {clicked_id}")
             return clicked_id
 
@@ -329,6 +335,51 @@ class CallbackManager:
             return new_panel_style, new_visible, new_button_style
 
     # =========================================================================
+    # Map Export Callback
+    # =========================================================================
+
+    def _register_map_export_callback(self) -> None:
+        """Register callback for exporting the network map as a vector graphic."""
+
+        @self.app.callback(
+            Output("map-export-download", "data"),
+            Input("export-map-button", "n_clicks"),
+            [
+                State("rep-period-dropdown", "value"),
+                State("time-slider", "value"),
+                State("pq-toggle-button", "children"),
+                State("map-export-format", "value"),
+            ],
+            prevent_initial_call=True
+        )
+        def export_map(
+                n_clicks: int,
+                selected_period: str,
+                selected_time: int,
+                pq_button_label: str,
+                fmt: str
+        ):
+            """Export the current network map view as a vector graphic."""
+            if not n_clicks:
+                raise PreventUpdate
+
+            handler = self.handlers.get('map_export')
+            if not handler:
+                raise PreventUpdate
+
+            pq_mode = "vLineP" if pq_button_label == "P" else "vLineQ"
+            fmt = fmt or "svg"
+
+            file_bytes = handler(
+                selected_period=selected_period,
+                selected_time=selected_time,
+                pq_mode=pq_mode,
+                fmt=fmt
+            )
+
+            return dcc.send_bytes(lambda buf: buf.write(file_bytes), f"network_map.{fmt}")
+
+    # =========================================================================
     # Plot Update Callback
     # =========================================================================
 
@@ -344,7 +395,13 @@ class CallbackManager:
                 Input("last-clicked-node", "data"),
                 Input("rep-period-dropdown", "value"),
                 Input("local-button", "children"),
-                Input("time-slider-range", "value")
+                Input("time-slider-range", "value"),
+                Input("y-axis-fixed", "value"),
+                Input("y-axis-min", "value"),
+                Input("y-axis-max", "value"),
+                Input("x-axis-fixed", "value"),
+                Input("x-axis-min", "value"),
+                Input("x-axis-max", "value"),
             ]
         )
         def update_dynamic_plot(
@@ -354,7 +411,13 @@ class CallbackManager:
                 node_idx: str,
                 selected_period: str,
                 scope: str,
-                time_range: list[int]
+                time_range: list[int],
+                y_fixed: list[str],
+                y_min: float,
+                y_max: float,
+                x_fixed: list[str],
+                x_min: float,
+                x_max: float
         ):
             """Update the dynamic plot based on user selections."""
             print(
@@ -372,10 +435,53 @@ class CallbackManager:
                     node_idx=node_idx,
                     selected_period=selected_period,
                     scope=scope,
-                    time_range=time_range
+                    time_range=time_range,
+                    y_range=self._resolve_axis_range(y_fixed, y_min, y_max),
+                    x_range=self._resolve_axis_range(x_fixed, x_min, x_max)
                 )
 
             return {}
+
+    @staticmethod
+    def _resolve_axis_range(
+            fixed: list[str],
+            axis_min: float,
+            axis_max: float
+    ):
+        """Return [min, max] if the fixed-range checkbox is on and both bounds are set, else None."""
+        if "fixed" not in (fixed or []) or axis_min is None or axis_max is None:
+            return None
+        return [axis_min, axis_max]
+
+    # =========================================================================
+    # Plot Export Callback
+    # =========================================================================
+
+    def _register_plot_export_callback(self) -> None:
+        """Register callback for exporting the analysis plot as SVG/PDF/PNG."""
+
+        @self.app.callback(
+            Output("plot-export-download", "data"),
+            Input("export-plot-button", "n_clicks"),
+            [
+                State("dynamic-plot", "figure"),
+                State("plot-export-format", "value"),
+            ],
+            prevent_initial_call=True
+        )
+        def export_plot(n_clicks: int, figure: dict, fmt: str):
+            """Export the currently displayed analysis plot to a static file."""
+            if not n_clicks or not figure:
+                raise PreventUpdate
+
+            fmt = fmt or "svg"
+            toimage_options = self.config.graph_options.graph_save_options.get(
+                "toImageButtonOptions", {}
+            )
+
+            file_bytes = export_plot_image(figure, fmt=fmt, toimage_options=toimage_options)
+
+            return dcc.send_bytes(lambda buf: buf.write(file_bytes), f"plot.{fmt}")
 
 
 class CallbackRegistry:

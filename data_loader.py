@@ -36,6 +36,7 @@ class LEGOData:
     vLineP: pd.DataFrame = field(default_factory=pd.DataFrame)  # Active power flow
     vLineQ: Optional[pd.DataFrame] = None  # Reactive power flow
     vGenP: pd.DataFrame = field(default_factory=pd.DataFrame)  # Generator active power
+    pDemandP: Optional[pd.DataFrame] = None  # Nodal demand
     vSOCP: Optional[pd.DataFrame] = None  # Voltage (SOCP formulation)
     vStIntraRes: Optional[pd.DataFrame] = None  # Storage state of charge
 
@@ -146,6 +147,9 @@ class SQLiteDataLoader(DataLoaderStrategy):
             if "vGenP" in tables:
                 print("  -> Loading vGenP...")
                 data.vGenP = self._load_vgenp(conn)
+            if "pDemandP" in tables:
+                print("  -> Loading pDemandP...")
+                data.pDemandP = self._load_pdemandp(conn)
             if "vSOCP_cii" in tables and "vSOCP_ui" in tables:
                 raise ValueError("Cannot load both vSOCP_cii and vSOCP_ui simultaneously.")
             if "vSOCP_cii" in tables and "vSOCP_ui" not in tables:
@@ -347,6 +351,18 @@ class SQLiteDataLoader(DataLoaderStrategy):
         for col in required_cols:
             if col not in df.columns:
                 raise ValueError(f"vGenP missing required column: {col}")
+
+        return df[required_cols]
+
+    @staticmethod
+    def _load_pdemandp(conn: sqlite3.Connection) -> pd.DataFrame:
+        """Load nodal demand variable (pDemandP)."""
+        df = pd.read_sql_query("SELECT * FROM pDemandP", conn)
+
+        required_cols = ["rp", "k", "i", "values"]
+        for col in required_cols:
+            if col not in df.columns:
+                raise ValueError(f"pDemandP missing required column: {col}")
 
         return df[required_cols]
 
@@ -601,6 +617,9 @@ class V2GDataLoader(DataLoaderStrategy):
             if "vGenP" in tables:
                 print("  -> Loading vGenP (from technology production tables)...")
                 data.vGenP = self._load_vgenp(conn)
+            if "pDemand" in tables:
+                print("  -> Loading pDemand...")
+                data.pDemandP = self._load_pdemand(conn)
 
             # Handle voltage - V2G uses vCii instead of vSOCP_cii/vSOCP_ui
             if "vSOCP_cii" in tables or "vSOCP_ui" in tables:
@@ -887,6 +906,24 @@ class V2GDataLoader(DataLoaderStrategy):
             return pd.concat(all_vgenp, ignore_index=True)
         else:
             return pd.DataFrame(columns=["rp", "k", "g", "values"])
+
+    @staticmethod
+    def _load_pdemand(conn: sqlite3.Connection) -> pd.DataFrame:
+        """
+        Load nodal demand from pDemand.
+
+        V2G pDemand columns: Time, Buses, values
+
+        Returns DataFrame with columns: rp, k, i, values
+        """
+        df = pd.read_sql_query("SELECT * FROM pDemand", conn)
+
+        # Rename columns to match expected format
+        df = df.rename(columns={"Buses": "i", "Time": "k"})
+        df["rp"] = "rp01"  # V2G has no representative periods
+        df["i"] = df["i"].astype(str)
+
+        return df[["rp", "k", "i", "values"]]
 
     @staticmethod
     def _load_vsocp(conn: sqlite3.Connection) -> pd.DataFrame:
@@ -1303,8 +1340,10 @@ def _transfer_data_to_object(obj, data: LEGOData) -> None:
         obj.vLineQ = data.vLineQ
     if not data.vGenP.empty:
         obj.vGenP = data.vGenP
+    if data.pDemandP is not None and not data.pDemandP.empty:
+        obj.pDemandP = data.pDemandP
     if data.vSOCP is not None and not data.vSOCP.empty:
-        obj.vSOCP= data.vSOCP
+        obj.vSOCP = data.vSOCP
     if data.vStIntraRes is not None and not data.vStIntraRes.empty:
         obj.vStIntraRes = data.vStIntraRes
 

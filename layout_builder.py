@@ -134,12 +134,16 @@ class LayoutBuilder:
                     }
                 ),
 
-                # 3. RIGHT SECTION: Plot Toggle
+                # 3. RIGHT SECTION: Map Export, Plot Toggle
                 html.Div(
-                    children=[self._build_plot_toggle_button()],
+                    children=[
+                        self._build_map_export_control(),
+                        self._build_plot_toggle_button(),
+                    ],
                     style={
                         "display": "flex",
                         "alignItems": "center",
+                        "gap": Spacing.SM,
                     }
                 ),
             ],
@@ -288,6 +292,48 @@ class LayoutBuilder:
         )
 
     @staticmethod
+    def _build_map_export_control() -> html.Div:
+        """Build the map export format selector and download button."""
+        return html.Div(
+            children=[
+                dcc.Dropdown(
+                    id="map-export-format",
+                    options=[
+                        {"label": "SVG", "value": "svg"},
+                        {"label": "PDF", "value": "pdf"},
+                    ],
+                    value="svg",
+                    clearable=False,
+                    searchable=False,
+                    style={"width": "80px", "fontSize": "13px"},
+                ),
+                html.Button(
+                    children=[
+                        html.Span("⬇", style={"marginRight": Spacing.XS}),
+                        html.Span("Export Map"),
+                    ],
+                    id="export-map-button",
+                    n_clicks=0,
+                    style={
+                        "display": "flex",
+                        "alignItems": "center",
+                        "padding": f"{Spacing.SM} {Spacing.MD}",
+                        "borderRadius": "6px",
+                        "border": "none",
+                        "backgroundColor": Colors.ACCENT,
+                        "color": Colors.TEXT_INVERSE,
+                        "fontWeight": "600",
+                        "fontSize": "14px",
+                        "cursor": "pointer",
+                    },
+                    title="Export the current map view as a vector graphic"
+                ),
+                dcc.Download(id="map-export-download"),
+            ],
+            style={"display": "flex", "alignItems": "center", "gap": Spacing.XS},
+        )
+
+    @staticmethod
     def _build_plot_toggle_button() -> html.Button:
         """Build the plot panel toggle button."""
         return html.Button(
@@ -380,7 +426,13 @@ class LayoutBuilder:
                         dcc.Graph(
                             id="dynamic-plot",
                             style={"height": "100%", "width": "100%"},
-                            config={"displayModeBar": True, "displaylogo": False},
+                            config={
+                                "displayModeBar": True,
+                                "displaylogo": False,
+                                "toImageButtonOptions": self.config.graph_options.graph_save_options.get(
+                                    "toImageButtonOptions", {}
+                                ),
+                            },
                         ),
                     ],
                     id="dynamic-plot-container",
@@ -411,7 +463,44 @@ class LayoutBuilder:
         )
 
     @staticmethod
-    def _build_panel_header() -> html.Div:
+    def _build_plot_export_control() -> html.Div:
+        """Build the plot export format selector and download button."""
+        return html.Div(
+            children=[
+                dcc.Dropdown(
+                    id="plot-export-format",
+                    options=[
+                        {"label": "SVG", "value": "svg"},
+                        {"label": "PDF", "value": "pdf"},
+                        {"label": "PNG", "value": "png"},
+                    ],
+                    value="svg",
+                    clearable=False,
+                    searchable=False,
+                    style={"width": "75px", "fontSize": "13px"},
+                ),
+                html.Button(
+                    "Export",
+                    id="export-plot-button",
+                    n_clicks=0,
+                    style={
+                        "padding": f"{Spacing.XS} {Spacing.SM}",
+                        "borderRadius": "4px",
+                        "border": "none",
+                        "backgroundColor": Colors.ACCENT,
+                        "color": Colors.TEXT_INVERSE,
+                        "fontWeight": "600",
+                        "fontSize": "13px",
+                        "cursor": "pointer",
+                    },
+                    title="Export this plot as a vector or raster file"
+                ),
+                dcc.Download(id="plot-export-download"),
+            ],
+            style={"display": "flex", "alignItems": "center", "gap": Spacing.XS},
+        )
+
+    def _build_panel_header(self) -> html.Div:
         """Build the plot panel header."""
         return html.Div(
             children=[
@@ -420,6 +509,7 @@ class LayoutBuilder:
                     "fontSize": "15px",
                     "color": Colors.TEXT,
                 }),
+                self._build_plot_export_control(),
                 html.Button(
                     "✕",
                     id="close-plot-panel",
@@ -508,6 +598,17 @@ class LayoutBuilder:
                 ),
                 html.Div(
                     children=[
+                        self._build_axis_range_control("Y-Axis", "y"),
+                        self._build_axis_range_control("X-Axis", "x"),
+                    ],
+                    style={
+                        "display": "flex",
+                        "gap": Spacing.LG,
+                        "marginBottom": Spacing.SM,
+                    }
+                ),
+                html.Div(
+                    children=[
                         html.Label("Time Range", style=self._label_style()),
                         dcc.RangeSlider(
                             id="time-slider-range",
@@ -529,6 +630,32 @@ class LayoutBuilder:
                 "flexShrink": "0",
                 "backgroundColor": Colors.SURFACE,
             }
+        )
+
+    def _build_axis_range_control(self, axis_label: str, prefix: str) -> html.Div:
+        """Build a fixed-range control (checkbox + min/max inputs) for one plot axis."""
+        return html.Div(
+            children=[
+                dcc.Checklist(
+                    id=f"{prefix}-axis-fixed",
+                    options=[{"label": f" Fix {axis_label}", "value": "fixed"}],
+                    value=[],
+                    style={"fontSize": "12px", "color": Colors.TEXT_LIGHT, "whiteSpace": "nowrap"},
+                ),
+                dcc.Input(
+                    id=f"{prefix}-axis-min",
+                    type="number",
+                    placeholder="Min",
+                    style={"width": "64px", "fontSize": "12px", "height": "28px"},
+                ),
+                dcc.Input(
+                    id=f"{prefix}-axis-max",
+                    type="number",
+                    placeholder="Max",
+                    style={"width": "64px", "fontSize": "12px", "height": "28px"},
+                ),
+            ],
+            style={"display": "flex", "alignItems": "center", "gap": Spacing.XS},
         )
 
     def _build_stores(self) -> html.Div:
