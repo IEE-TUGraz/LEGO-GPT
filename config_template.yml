@@ -55,6 +55,12 @@ map_options:
   pie_chart_min_radius: 8
   pie_chart_max_radius: 16
 
+  # Optional: CARTO now requires an API key to remove the watermark from the
+  # basemap tiles (both the live map and exported SVG/PDF/PNG). Get a free key
+  # at https://carto.com/ and paste it here. Leave empty to keep using the
+  # basemap without a key (tiles still work, just show CARTO's watermark).
+  carto_api_key: ""
+
   technology_colors:
     Wind: "#2ecc71"
     Solar: "#27ae60"

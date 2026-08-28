@@ -39,6 +39,7 @@ class MapConfig:
     arrow_min_size: float = 0.5
     pie_chart_min_radius: int = 8
     pie_chart_max_radius: int = 16
+    carto_api_key: str = ""
     technology_colors: dict[str, str] = field(default_factory=dict)
     cluster_options: ClusterOptions = field(default_factory=ClusterOptions)
 
@@ -291,6 +292,7 @@ def get_default_config() -> dict:
             "arrow_min_size": 0.5,
             "pie_chart_min_radius": 8,
             "pie_chart_max_radius": 16,
+            "carto_api_key": "",
             "technology_colors": {},
             "cluster_options": {
                 "cluster_radius": 60,

@@ -406,12 +406,19 @@ class LayoutBuilder:
         bounds = self.data.get_map_bounds()
         center = self.data.get_map_center()
 
+        tile_url = "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+        carto_api_key = self.config.map_options.carto_api_key
+        if carto_api_key:
+            # Removes CARTO's "API key required" watermark from the tiles.
+            # Optional - see config_template.yml for how to get a key.
+            tile_url += f"?key={carto_api_key}"
+
         return html.Div(
             children=[
                 dl.Map(
                     children=[
                         dl.TileLayer(
-                            url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+                            url=tile_url,
                             attribution='&copy; <a href="https://carto.com/">CARTO</a>'
                         ),
                         dl.ZoomControl(position="bottomright"),

@@ -80,7 +80,7 @@ def render_network_figure(
     legend_handles = _draw_nodes(ax, export_data)
 
     ax.margins(0.08)
-    _add_basemap(ax)
+    _add_basemap(ax, export_data.get("carto_api_key", ""))
     ax.set_aspect("equal", adjustable="box")
 
     ax.set_xlabel("Longitude")
@@ -109,7 +109,7 @@ def render_network_figure(
     return buf.getvalue()
 
 
-def _add_basemap(ax) -> None:
+def _add_basemap(ax, carto_api_key: str = "") -> None:
     """
     Add the CARTO Positron basemap as a background raster layer.
 
@@ -117,9 +117,22 @@ def _add_basemap(ax) -> None:
     beneath the vector line/pie layers - the same "light_all" CARTO style
     used by the live Leaflet map. Network/tile-server failures are non-fatal:
     the export still succeeds, just without the background image.
+
+    Args:
+        carto_api_key: Optional CARTO API key to drop the tiles' watermark
+            (see config_template.yml). A raw URL is used here rather than
+            the bundled `ctx.providers.CartoDB.Positron` object, since that
+            provider definition has no slot for a key - and unlike the
+            browser-side Leaflet tile URL, this one is fetched directly by
+            contextily, so it drops the `{s}` subdomain and `{r}` retina
+            placeholders that only make sense for a browser's own requests.
     """
+    tile_url = "https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png"
+    if carto_api_key:
+        tile_url += f"?key={carto_api_key}"
+
     try:
-        ctx.add_basemap(ax, crs="EPSG:4326", source=ctx.providers.CartoDB.Positron)
+        ctx.add_basemap(ax, crs="EPSG:4326", source=tile_url)
     except Exception as exc:
         print(f"  [Map Export] Could not fetch basemap tiles ({exc}); exporting without basemap.")
 

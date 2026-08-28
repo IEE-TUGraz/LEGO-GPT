@@ -132,6 +132,7 @@ class NetworkMapGenerator:
                 "max": js_generator.max_radius,
                 "scale_factor": js_generator.scale_factor,
             },
+            "carto_api_key": self._map_options.get("carto_api_key", ""),
             "selected_period": selected_period,
             "selected_time_value": selected_time_value,
             "pq_mode": pq_mode,
