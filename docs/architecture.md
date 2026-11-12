@@ -27,8 +27,8 @@ server.
 
 ### Data Loader (`data_loader.py`)
 
-Implements the Strategy pattern to load data from different sources (SQLite, Excel). It normalizes raw data into a
-standard `LEGOData` dataclass.
+Loads the V2G-QUESTS-PSOM SQLite results and normalizes them into a standard `LEGOData` dataclass. It uses the Strategy
+pattern, so further data sources can be added.
 
 ### Layout Builder (`layout_builder.py`)
 

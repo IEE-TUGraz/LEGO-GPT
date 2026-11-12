@@ -1,28 +1,8 @@
-# GAMS log and opt files
-*.opt
-*.log*
-*.lst
-*.lxi
-*tmp*.xlsx
-*.gdx
-
-*.dat
-*.cmd
-*.~log
-*.gms
-# GAMS project file
-*.gsp
-
 # Temporary files
 ~$*
 tmp*/
 tmp*.txt
 *~tmp*
-
-# GAMS result file (because <100MB)
-*.xlsm
-results/
-
 
 # Python files
 __pycache__/
@@ -35,12 +15,9 @@ __pycache__/
 .DS_Store
 
 # Dummy data files
-
 examples/
-Robert/
 
 testing.py
 
 config.yml
 /docs/build
-

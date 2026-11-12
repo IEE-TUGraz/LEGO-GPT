@@ -36,6 +36,6 @@ Before running the tool, ensure your configuration is correct.
 
 2. Edit `config.yml` to point to your data source:
    ```yaml
-   input_type: sqlite  # or 'excel'
-   input_dir: "data/model.sqlite"
+   input_type: V2G
+   input_dir: "path/to/V2G-QUESTS-PSOM/output"  # folder with result.sqlite
    ```

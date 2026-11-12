@@ -1,8 +1,9 @@
-# LEGO-GPT: Graph Plotting Tool for LEGO
+# LEGO-GPT: Graph Plotting Tool (V2G-QUESTS-PSOM version)
 
-LEGO-GPT is a modular, interactive visualization tool designed for analyzing optimization results from LEGO models. It
-provides a web-based interface built with Dash to visualize network maps, power flows, dispatch schedules, and other
-time-series data.
+LEGO-GPT is a modular, interactive visualization tool. This version is dedicated to the results of the
+[V2G-QUESTS-PSOM](https://github.com/IEE-TUGraz/V2G-QUESTS-PSOM) power system optimization model: it reads the SQLite
+result database (`output/result.sqlite`) and provides a web-based interface built with Dash to visualize network maps,
+power flows, dispatch schedules, EV charging and other time-series data.
 
 ## 1. Project Structure
 
@@ -13,7 +14,7 @@ to specialized modules. This separation of concerns makes the tool easier to mai
 LEGO-GPT/
 ├── LEGO_GPT.py           # Main application entry point (Orchestrator)
 ├── config.yml            # Central configuration file
-├── data_loader.py        # Data ingestion (SQLite/Excel) using Strategy pattern
+├── data_loader.py        # Data ingestion (V2G-QUESTS-PSOM SQLite) using Strategy pattern
 ├── data_provider.py      # Interface for accessing processed data
 ├── layout_builder.py     # UI component construction (Dash Layout)
 ├── callback_manager.py   # Event handling and reactivity (Dash Callbacks)
@@ -28,7 +29,7 @@ LEGO-GPT/
 * **LEGO_GPT (Orchestrator):** Initializes the app, loads configuration, and wires together the data, UI, and callback
   components.
 * **Data Layer:**
-    * `data_loader.py`: Handles raw data extraction from SQLite databases or Excel files. It standardizes data into a
+    * `data_loader.py`: Reads the V2G-QUESTS-PSOM SQLite result database and standardizes the data into a
       `LEGOData` container.
     * `data_provider.py`: Acts as a clean interface for the UI to request specific data subsets.
 * **Visualization Layer:**
@@ -49,7 +50,7 @@ The application lifecycle follows these steps:
     * `_load_configuration()` reads settings for input directories, map styles, and plot options.
 
 2. **Data Loading:**
-    * `_load_data()` invokes the appropriate loader (SQLite or Excel) via `data_loader.py`.
+    * `_load_data()` invokes the V2G-QUESTS-PSOM loader via `data_loader.py`.
     * Data is loaded into standard Pandas DataFrames (e.g., `vGenP` for generation, `vLineP` for power flow) and stored
       in the `LEGOData` dataclass.
 
@@ -91,7 +92,7 @@ To support a new input format (e.g., CSV or JSON):
 1. Open `data_loader.py`.
 2. Create a new class that inherits from `DataLoaderStrategy`.
 3. Implement the `load(self, input_dir, tables)` method to return a `LEGOData` object.
-4. Update `get_data` to instantiate your new loader based on the `input_type` config.
+4. Update `get_data` to instantiate your new loader (and extend the allowed `input_type` values in `config.py`).
 
 ### Customizing the UI
 

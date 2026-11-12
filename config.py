@@ -126,7 +126,7 @@ class AppConfig:
 
     Attributes:
         input_dir: Path to input data directory or file.
-        input_type: Type of input data ("sqlite" or "excel").
+        input_type: Type of input data. Only "V2G" (V2G-QUESTS-PSOM SQLite results) is supported.
         tables: List of table names to load.
         dropdown_options_y: Y-axis dropdown options.
         dropdown_options_x: X-axis dropdown options.
@@ -134,7 +134,7 @@ class AppConfig:
         graph_options: Graph visualization configuration.
     """
     input_dir: str
-    input_type: Literal["sqlite", "excel", "V2G"]
+    input_type: Literal["V2G"]
     tables: list[str]
     dropdown_options_y: list[DropdownOption]
     dropdown_options_x: list[DropdownOption]
@@ -155,11 +155,10 @@ class AppConfig:
 
     def _validate_input_type(self) -> None:
         """Validate that input_type is supported."""
-        valid_types = ("sqlite", "excel", "V2G")
-        if self.input_type not in valid_types:
+        if self.input_type != "V2G":
             raise ValueError(
-                f"Invalid input_type: '{self.input_type}'. "
-                f"Must be one of: {valid_types}"
+                f"Invalid input_type: '{self.input_type}'. This version of LEGO-GPT only "
+                f"supports V2G-QUESTS-PSOM results (input_type: V2G)."
             )
 
     def _validate_required_tables(self) -> None:
@@ -210,7 +209,7 @@ class AppConfig:
 
         return cls(
             input_dir=config_dict["input_dir"],
-            input_type=config_dict["input_type"],
+            input_type=config_dict.get("input_type", "V2G"),
             tables=config_dict.get("tables", []),
             dropdown_options_y=dropdown_y,
             dropdown_options_x=dropdown_x,
@@ -222,6 +221,10 @@ class AppConfig:
     def from_yaml(cls, config_path: str) -> "AppConfig":
         """
         Load configuration from a YAML file.
+
+        A relative ``input_dir`` is resolved against the folder of the configuration
+        file if it exists there (e.g. ``input_dir: output`` in the ``plot_config.yml``
+        of V2G-QUESTS-PSOM), otherwise against the current working directory.
 
         Args:
             config_path: Path to the YAML configuration file.
@@ -237,8 +240,14 @@ class AppConfig:
         if not path.exists():
             raise FileNotFoundError(f"Configuration file not found: {config_path}")
 
-        with open(path, 'r') as f:
+        with open(path, 'r', encoding='utf-8') as f:
             config_dict = yaml.safe_load(f)
+
+        input_dir = config_dict.get("input_dir")
+        if input_dir and not Path(input_dir).is_absolute():
+            relative_to_config = path.resolve().parent / input_dir
+            if relative_to_config.exists():
+                config_dict["input_dir"] = str(relative_to_config)
 
         return cls.from_dict(config_dict)
 
@@ -268,12 +277,13 @@ def get_default_config() -> dict:
         Default configuration as dictionary.
     """
     return {
-        "input_type": "sqlite",
-        "input_dir": "PATH_TO_LEGO_RESULTS",
+        "input_type": "V2G",
+        "input_dir": "PATH_TO_V2G_QUESTS_PSOM_OUTPUT",
         "tables": [
             "rp", "k", "i", "g", "gi", "la",
-            "vLineP", "vLineQ", "vGenP", "vSOCP_cii",
-            "pPmax", "vStIntraRes", "coords", "voltage_bounds"
+            "vLineP", "vLineQ", "vGenP", "pDemand", "vSOCP_cii",
+            "pPmax", "vStIntraRes", "coords", "voltage_bounds",
+            "ev", "ev_availability", "vDchEV", "vChEV", "vSocEV"
         ],
         "dropdown_options_y": [
             {"label": "Y: Dispatch", "value": "dispatch"},
